@@ -1,0 +1,10 @@
+# Never push secrets
+.env
+credentials.json
+token.json
+form_config.json
+
+# Python junk
+__pycache__/
+*.pyc
+.DS_Store
