@@ -8,7 +8,7 @@
 # Pulls picks from Google Form responses when available,
 # falls back to sample data for testing.
 #
-# Auto-refreshes every 60 minutes during tournament hours (8am–8pm ET).
+# Auto-refreshes every 15 minutes during tournament hours (8am–8pm ET).
 
 import sys
 import os
@@ -226,7 +226,7 @@ SHARED_STYLES = """
 TOURNAMENT_TZ = ZoneInfo("America/New_York")
 TOURNAMENT_START_HOUR = 8
 TOURNAMENT_END_HOUR = 20
-REFRESH_INTERVAL_SEC = 3600
+REFRESH_INTERVAL_SEC = 900  # 15 minutes
 
 
 def is_tournament_hours():
@@ -276,7 +276,7 @@ def rank_html(rank):
 # ---------- Data Loading ----------
 @st.cache_data(ttl=REFRESH_INTERVAL_SEC)
 def load_picks():
-    """Load picks from Google Form responses, cached for 60 min."""
+    """Load picks from Google Form responses, cached for 15 min."""
     try:
         from sheets_reader import fetch_picks
         return fetch_picks()
@@ -287,7 +287,7 @@ def load_picks():
 
 @st.cache_data(ttl=REFRESH_INTERVAL_SEC)
 def load_live_scores():
-    """Load live Masters scores from ESPN, cached for 60 min."""
+    """Load live Masters scores from ESPN, cached for 15 min."""
     try:
         from live_scores import get_live_masters_scores
         return get_live_masters_scores()
@@ -343,7 +343,7 @@ for player_name, data in tournament_scores.items():
 # ---------- Header ----------
 refresh_time = get_last_refresh_str()
 if is_tournament_hours():
-    refresh_text = f"Last updated: {refresh_time} &middot; Auto-refreshing every 60 min"
+    refresh_text = f"Last updated: {refresh_time} &middot; Auto-refreshing every 15 min"
 else:
     refresh_text = f"Last updated: {refresh_time} &middot; Refresh paused (outside 8am&ndash;8pm ET)"
 
