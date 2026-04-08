@@ -32,6 +32,11 @@ TOKEN_FILE = os.path.join(PROJECT_ROOT, "token.json")
 CONFIG_FILE = os.path.join(PROJECT_ROOT, "form_config.json")
 
 
+def _is_cloud():
+    """Detect if we're running on Streamlit Cloud."""
+    return os.path.exists("/mount/src")
+
+
 def authenticate():
     """
     Load saved credentials. Supports two modes:
@@ -39,34 +44,38 @@ def authenticate():
     - Local: reads token.json from disk
     """
     creds = None
+    on_cloud = _is_cloud()
 
     # Try Streamlit secrets first (for cloud deployment)
     try:
         import streamlit as st
         if "google_token" in st.secrets:
             token_data = dict(st.secrets["google_token"])
-            # Ensure scopes are present — Streamlit secrets may not have them
             token_data["scopes"] = SCOPES
             creds = Credentials.from_authorized_user_info(token_data, SCOPES)
-    except Exception as e:
-        print(f"Secrets auth failed: {e}")
 
-    # Fall back to local token file
-    if creds is None and os.path.exists(TOKEN_FILE):
+            # Refresh if expired
+            if creds and not creds.valid and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+
+            return creds
+    except Exception as e:
+        if on_cloud:
+            raise RuntimeError(f"Cloud auth failed: {e}")
+
+    # Local only from here — never touch filesystem on cloud
+    if on_cloud:
+        raise RuntimeError("No google_token found in Streamlit secrets")
+
+    if os.path.exists(TOKEN_FILE):
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
 
-    # Refresh expired credentials
     if creds and not creds.valid and creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        # Save refreshed token locally if possible
-        try:
-            with open(TOKEN_FILE, "w") as token:
-                token.write(creds.to_json())
-        except OSError:
-            pass  # Can't write on Streamlit Cloud, that's fine
+        with open(TOKEN_FILE, "w") as token:
+            token.write(creds.to_json())
 
-    # Only try interactive auth locally as a last resort
-    if (creds is None or not creds.valid) and os.path.exists(CREDENTIALS_FILE):
+    if creds is None or not creds.valid:
         flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
         creds = flow.run_local_server(port=0)
         with open(TOKEN_FILE, "w") as token:
