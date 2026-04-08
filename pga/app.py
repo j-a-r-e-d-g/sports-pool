@@ -280,7 +280,8 @@ def load_picks():
     try:
         from sheets_reader import fetch_picks
         return fetch_picks()
-    except Exception:
+    except Exception as e:
+        st.error(f"Error loading picks: {e}")
         return []
 
 
