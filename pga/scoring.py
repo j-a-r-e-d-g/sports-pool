@@ -12,18 +12,45 @@
 
 import unicodedata
 
+# Map of characters that Unicode NFKD decomposition doesn't handle
+# (e.g. ø is a standalone letter in Danish, not an accented o)
+SPECIAL_CHARS = {
+    "ø": "o",
+    "Ø": "O",
+    "ð": "d",
+    "Ð": "D",
+    "ł": "l",
+    "Ł": "L",
+    "æ": "ae",
+    "Æ": "AE",
+}
+
+# Known name mismatches between form picks and ESPN data
+# Key = normalized form name, Value = normalized ESPN name
+NAME_ALIASES = {
+    "christopher gotterup": "chris gotterup",
+    "pongsapak laopakdee": "fifa laopakdee",
+}
+
 
 def normalize_name(name):
     """
-    Normalize a player name so that accent differences don't break matching.
-    e.g. "Ludvig Åberg" and "Ludvig Aberg" both become "ludvig aberg".
-    Strips accents and lowercases.
+    Normalize a player name so that accent/spelling differences don't break matching.
+    e.g. "Ludvig Åberg" -> "ludvig aberg", "Nicolai Højgaard" -> "nicolai hojgaard"
+    Strips accents, handles special characters, and lowercases.
     """
+    # Replace special characters that NFKD won't decompose
+    for char, replacement in SPECIAL_CHARS.items():
+        name = name.replace(char, replacement)
+
     # Decompose accented characters (e.g. Å → A + combining ring)
     # then strip the combining marks, leaving just the base letter
     nfkd = unicodedata.normalize("NFKD", name)
     stripped = "".join(c for c in nfkd if not unicodedata.combining(c))
-    return stripped.lower().strip()
+    normalized = stripped.lower().strip()
+
+    # Check for known aliases
+    return NAME_ALIASES.get(normalized, normalized)
 
 
 # Bonus strokes subtracted for finishing positions
