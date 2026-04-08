@@ -107,8 +107,9 @@ def create_form(creds, tiers):
                 "description": (
                     "Pick 2 players from each tier (10 total). "
                     "Scoring: cumulative to-par + missed cut penalty (+11) + "
-                    "top 10 bonus (-10) + placement bonuses (1st: -15, 2nd: -14, "
-                    "3rd: -13, 4th: -12, 5th: -11). "
+                    "WD: +6 per round not played/finished. "
+                    "Bonuses (total): top 10 finish: -10, 5th: -11, 4th: -12, "
+                    "3rd: -13, 2nd: -14, 1st: -15. "
                     "Tiebreaker: closest prediction to the winning score."
                 ),
             },

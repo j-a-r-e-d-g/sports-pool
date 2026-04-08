@@ -76,10 +76,17 @@ def parse_tournament_scores(event):
                 except (ValueError, TypeError):
                     score = 0
 
-            # Check status — "cut" means they missed the cut
+            # Check status — "cut" means missed the cut, "wd" means withdrew
             status = competitor.get("status", {})
             status_type = status.get("type", {}).get("name", "")
             made_cut = status_type != "cut"
+
+            # Detect withdrawal and figure out which round they withdrew in
+            wd_round = None
+            if status_type == "wd":
+                # ESPN tracks the current period (round) the player was in
+                period = status.get("period", 0)
+                wd_round = period if period >= 1 else 1
 
             # Finish position (only set if tournament is complete or player is done)
             # ESPN uses "order" for current position on the leaderboard
@@ -94,6 +101,7 @@ def parse_tournament_scores(event):
             scores[name] = {
                 "score": score,
                 "made_cut": made_cut,
+                "wd_round": wd_round,
                 "finish_position": finish_position,
             }
 
@@ -119,6 +127,27 @@ def get_live_masters_scores():
         return None
 
     return parse_tournament_scores(event)
+
+
+def get_current_tournament():
+    """
+    Fetch whatever PGA tournament is currently on the ESPN scoreboard.
+    Returns a tuple of (event_name, scores_dict) or (None, None) if nothing is active.
+    """
+    data = fetch_scoreboard()
+    if not data:
+        return None, None
+
+    events = data.get("events", [])
+    if not events:
+        return None, None
+
+    # Grab the first event on the scoreboard
+    event = events[0]
+    event_name = event.get("name", "Unknown Event")
+    print(f"Found current event: {event_name}")
+    scores = parse_tournament_scores(event)
+    return event_name, scores
 
 
 # Quick test: run this directly to see what's on the scoreboard
