@@ -10,6 +10,14 @@
 #
 # Auto-refreshes every 60 minutes during tournament hours (8am–8pm ET).
 
+import sys
+import os
+
+# Ensure the pga/ directory is on the Python path so imports work
+# whether running locally (cd pga && streamlit run app.py) or from
+# the repo root (Streamlit Cloud runs: streamlit run pga/app.py)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime

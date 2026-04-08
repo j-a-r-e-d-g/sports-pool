@@ -3,6 +3,7 @@
 credentials.json
 token.json
 form_config.json
+.streamlit/secrets.toml
 
 # Python junk
 __pycache__/

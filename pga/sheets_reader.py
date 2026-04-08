@@ -33,27 +33,63 @@ CONFIG_FILE = os.path.join(PROJECT_ROOT, "form_config.json")
 
 
 def authenticate():
-    """Load saved credentials or run the OAuth flow."""
+    """
+    Load saved credentials. Supports two modes:
+    - Local: reads token.json from disk
+    - Streamlit Cloud: reads token from st.secrets["google_token"]
+    """
     creds = None
 
-    if os.path.exists(TOKEN_FILE):
+    # Try Streamlit secrets first (for cloud deployment)
+    try:
+        import streamlit as st
+        if "google_token" in st.secrets:
+            token_data = dict(st.secrets["google_token"])
+            # Convert scopes from streamlit secrets format (may be a list-like object)
+            if "scopes" in token_data:
+                token_data["scopes"] = list(token_data["scopes"])
+            creds = Credentials.from_authorized_user_info(token_data, SCOPES)
+    except Exception:
+        pass
+
+    # Fall back to local token file
+    if creds is None and os.path.exists(TOKEN_FILE):
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            # Save refreshed token locally if possible
+            try:
+                with open(TOKEN_FILE, "w") as token:
+                    token.write(creds.to_json())
+            except OSError:
+                pass  # Can't write on Streamlit Cloud, that's fine
         else:
+            # Only try interactive auth locally
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
-
-        with open(TOKEN_FILE, "w") as token:
-            token.write(creds.to_json())
+            with open(TOKEN_FILE, "w") as token:
+                token.write(creds.to_json())
 
     return creds
 
 
 def load_form_config():
-    """Load the form ID from the config file saved by form_generator.py."""
+    """
+    Load the form ID. Checks in order:
+    1. Streamlit secrets (for cloud)
+    2. form_config.json file (for local)
+    """
+    # Try Streamlit secrets first
+    try:
+        import streamlit as st
+        if "form_config" in st.secrets:
+            return dict(st.secrets["form_config"])
+    except Exception:
+        pass
+
+    # Fall back to local file
     if not os.path.exists(CONFIG_FILE):
         print("No form_config.json found. Run form_generator.py first.")
         return None
