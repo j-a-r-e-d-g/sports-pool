@@ -1,15 +1,16 @@
 # sheets_reader.py
-# Reads pool picks from Google Form responses via the Forms API.
-# Parses responses into the same format the scoring engine expects.
+# Reads pool picks from the Google Sheet linked to the form.
+# This lets us edit responses directly in the sheet (e.g. fix a tiebreaker).
 #
-# The form has these questions in order:
-#   1. Your Name
-#   2-3. Tier 1 picks (1 of 2, 2 of 2)
-#   4-5. Tier 2 picks
-#   6-7. Tier 3 picks
-#   8-9. Tier 4 picks
-#   10-11. Tier 5 picks
-#   12. Tiebreaker prediction
+# Sheet columns (from the Google Form):
+#   A: Timestamp
+#   B: Your Name
+#   C-D: Tier 1 picks (1 of 2, 2 of 2)
+#   E-F: Tier 2 picks
+#   G-H: Tier 3 picks
+#   I-J: Tier 4 picks
+#   K-L: Tier 5 picks
+#   M: Tiebreaker prediction
 
 import os
 import json
@@ -84,50 +85,28 @@ def authenticate():
     return creds
 
 
-def load_form_config():
+# Spreadsheet ID for the Google Sheet linked to the form
+SPREADSHEET_ID = "1Zh-Thre-zsy6w7dIcm4h_xlEep58cl7LYWKiANRkWyA"
+
+
+def get_spreadsheet_id():
     """
-    Load the form ID. Checks in order:
-    1. Streamlit secrets (for cloud)
-    2. form_config.json file (for local)
+    Get the spreadsheet ID. Checks Streamlit secrets first (for cloud),
+    falls back to the hardcoded default.
     """
-    # Try Streamlit secrets first
     try:
         import streamlit as st
         if "form_config" in st.secrets:
-            return dict(st.secrets["form_config"])
+            return st.secrets["form_config"].get("spreadsheet_id", SPREADSHEET_ID)
     except Exception:
         pass
-
-    # Fall back to local file
-    if not os.path.exists(CONFIG_FILE):
-        print("No form_config.json found. Run form_generator.py first.")
-        return None
-
-    with open(CONFIG_FILE, "r") as f:
-        return json.load(f)
-
-
-def get_question_order(forms_service, form_id):
-    """
-    Get the form's question IDs in order so we can map responses
-    to the right fields (name, tier picks, tiebreaker).
-    """
-    form = forms_service.forms().get(formId=form_id).execute()
-    question_ids = []
-
-    for item in form.get("items", []):
-        question = item.get("questionItem", {}).get("question", {})
-        question_id = question.get("questionId")
-        if question_id:
-            question_ids.append(question_id)
-
-    return question_ids
+    return SPREADSHEET_ID
 
 
 def fetch_picks(creds=None):
     """
-    Fetch all form responses and parse them into the participant format
-    expected by the scoring engine.
+    Read picks from the Google Sheet linked to the form.
+    Edits made directly in the sheet are picked up immediately.
 
     Returns a list of dicts:
         [
@@ -142,75 +121,48 @@ def fetch_picks(creds=None):
     if creds is None:
         creds = authenticate()
 
-    config = load_form_config()
-    if not config:
-        return []
+    spreadsheet_id = get_spreadsheet_id()
 
-    form_id = config["form_id"]
+    # Build the Sheets API service
+    sheets_service = build("sheets", "v4", credentials=creds)
 
-    # Build the Forms API service
-    forms_service = build("forms", "v1", credentials=creds)
+    # Read all rows (skip header row)
+    # Columns: A=Timestamp, B=Name, C-L=Picks (10), M=Tiebreaker
+    result = sheets_service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range="A2:M",  # Start at row 2 to skip headers
+    ).execute()
 
-    # Get question IDs in order so we can map responses correctly
-    question_ids = get_question_order(forms_service, form_id)
+    rows = result.get("values", [])
 
-    # question_ids should be in this order:
-    # [0] = Name
-    # [1-2] = Tier 1 picks
-    # [3-4] = Tier 2 picks
-    # [5-6] = Tier 3 picks
-    # [7-8] = Tier 4 picks
-    # [9-10] = Tier 5 picks
-    # [11] = Tiebreaker
-
-    if len(question_ids) < 12:
-        print(f"Expected 12 questions, found {len(question_ids)}. Form may be misconfigured.")
-        return []
-
-    name_qid = question_ids[0]
-    pick_qids = question_ids[1:11]  # 10 pick questions
-    tiebreaker_qid = question_ids[11]
-
-    # Fetch all responses
-    responses = forms_service.forms().responses().list(formId=form_id).execute()
-    response_list = responses.get("responses", [])
-
-    if not response_list:
+    if not rows:
         print("No form responses yet.")
         return []
 
     participants = []
-    for response in response_list:
-        answers = response.get("answers", {})
+    for row in rows:
+        # Pad row in case some cells are empty at the end
+        while len(row) < 13:
+            row.append("")
 
-        # Extract the participant's name
-        name_answer = answers.get(name_qid, {})
-        name = name_answer.get("textAnswers", {}).get("answers", [{}])[0].get("value", "Unknown")
+        name = row[1].strip()  # Column B
+        picks = [cell.strip() for cell in row[2:12]]  # Columns C-L (10 picks)
+        tb_value = row[12].strip()  # Column M
 
-        # Extract all 10 picks
-        picks = []
-        for qid in pick_qids:
-            pick_answer = answers.get(qid, {})
-            pick_value = pick_answer.get("textAnswers", {}).get("answers", [{}])[0].get("value", "")
-            picks.append(pick_value)
-
-        # Extract tiebreaker prediction
-        tb_answer = answers.get(tiebreaker_qid, {})
-        tb_value = tb_answer.get("textAnswers", {}).get("answers", [{}])[0].get("value", "0")
-
-        # Parse tiebreaker as int (handle both "-12" and "12" formats)
+        # Parse tiebreaker as int
         try:
             tiebreaker = int(tb_value)
-        except ValueError:
+        except (ValueError, TypeError):
             tiebreaker = 0
 
-        participants.append({
-            "name": name,
-            "picks": picks,
-            "tiebreaker": tiebreaker,
-        })
+        if name:  # Skip empty rows
+            participants.append({
+                "name": name,
+                "picks": picks,
+                "tiebreaker": tiebreaker,
+            })
 
-    print(f"Loaded {len(participants)} picks from Google Form responses.")
+    print(f"Loaded {len(participants)} picks from Google Sheet.")
     return participants
 
 
