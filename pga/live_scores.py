@@ -78,23 +78,25 @@ def parse_tournament_scores(event):
 
             # Check status — "cut" means missed the cut, "wd" means withdrew
             status = competitor.get("status", {})
-            status_type = status.get("type", {}).get("name", "")
-            made_cut = status_type != "cut"
+            status_type = status.get("type", {}).get("name", "").lower()
+            made_cut = status_type not in ("cut", "missed_cut", "mc")
 
             # Detect withdrawal and figure out which round they withdrew in
             wd_round = None
             if status_type == "wd":
                 # ESPN tracks the current period (round) the player was in
                 period = status.get("period", 0)
-                wd_round = period if period >= 1 else 1
+                # Clamp to valid range 1-4
+                wd_round = max(1, min(4, period)) if period >= 1 else 1
 
             # Finish position (only set if tournament is complete or player is done)
             # ESPN uses "order" for current position on the leaderboard
             position = competitor.get("order")
             # Only treat as final finish position if the event is complete
-            event_status = event.get("status", {}).get("type", {}).get("name", "")
+            # Case-insensitive check for safety
+            event_status = event.get("status", {}).get("type", {}).get("name", "").upper()
             if event_status == "STATUS_FINAL":
-                finish_position = position
+                finish_position = position if position and position > 0 else None
             else:
                 finish_position = None
 

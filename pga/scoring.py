@@ -108,6 +108,8 @@ def calculate_wd_penalty(wd_round):
     """
     if wd_round is None:
         return 0
+    # Clamp to valid range just in case
+    wd_round = max(1, min(TOTAL_ROUNDS, wd_round))
     rounds_missed = TOTAL_ROUNDS - wd_round + 1
     return WD_PENALTY_PER_ROUND * rounds_missed
 
@@ -174,10 +176,16 @@ def calculate_participant_score(picks, tournament_scores):
     normalized_scores = {normalize_name(k): v for k, v in tournament_scores.items()}
 
     for player_name in picks:
+        if not player_name:
+            continue  # Skip empty picks
+
         # Try exact match first, then fall back to normalized match
         player_data = tournament_scores.get(player_name)
         if player_data is None:
             player_data = normalized_scores.get(normalize_name(player_name), {})
+
+        if not player_data and tournament_scores:
+            print(f"WARNING: No ESPN match for pick '{player_name}'")
 
         score = calculate_player_score(player_data)
         score["name"] = player_name
