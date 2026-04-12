@@ -33,10 +33,9 @@ init_db()
 
 # ---------- Page Config (must be first Streamlit call) ----------
 st.set_page_config(
-    page_title="2026 Masters Pool",
-    page_icon="🌺",
+    page_title="PGA Pool",
+    page_icon="⛳",
     layout="wide",
-    initial_sidebar_state="collapsed",
 )
 
 # ---------- Augusta National Theme (CSS only — applied via st.markdown) ----------
@@ -73,10 +72,9 @@ THEME_CSS = """
         color: #f5f5f0 !important;
     }
 
-    /* Hide default Streamlit chrome */
+    /* Hide default Streamlit chrome (keep sidebar nav visible) */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
 </style>
 """
 st.markdown(THEME_CSS, unsafe_allow_html=True)

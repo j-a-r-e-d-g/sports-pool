@@ -1,33 +1,82 @@
-# admin.py
-# Tournament admin page — create tournaments, configure tiers, add players.
-# Run with: streamlit run pga/admin.py
-#
-# This is a separate page from the main leaderboard app.
-# Only you (the pool runner) use this to set up each week's tournament.
+# Admin page — create tournaments, configure tiers, add players.
+# Password protected so only the pool runner can access it.
 
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_pga_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _pga_dir)
 
-# Load .env for local development (DATABASE_URL)
 from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(os.path.join(_pga_dir, "..", ".env"))
 
 import streamlit as st
 from datetime import datetime, date, time
 from db import (
     init_db, create_tournament, list_tournaments, get_tournament,
     update_tournament_status, create_tier, get_tiers, delete_tiers,
-    add_players, get_players_by_tier, get_entry_count,
+    add_players, get_players_by_tier, get_entry_count, get_entries,
 )
 
 st.set_page_config(page_title="Pool Admin", page_icon="⛳", layout="wide")
 
-# Ensure tables exist
 init_db()
 
-st.title("Pool Admin")
+# ---------- Theme ----------
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
+    .stApp { background-color: #006747; }
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------- Password Gate ----------
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+if not ADMIN_PASSWORD:
+    try:
+        if "admin" in st.secrets and "password" in st.secrets["admin"]:
+            ADMIN_PASSWORD = st.secrets["admin"]["password"]
+    except Exception:
+        pass
+
+if not ADMIN_PASSWORD:
+    st.error("Admin password not configured. Set ADMIN_PASSWORD in .env or [admin] password in secrets.")
+    st.stop()
+
+if "admin_auth" not in st.session_state:
+    st.session_state.admin_auth = False
+
+if not st.session_state.admin_auth:
+    st.markdown("""
+    <div style="text-align: center; padding: 2rem 0;">
+        <h1 style="font-family: 'EB Garamond', Georgia, serif; color: #FFD700;
+                   font-size: 2rem; letter-spacing: 2px;">
+            POOL ADMIN
+        </h1>
+    </div>
+    """, unsafe_allow_html=True)
+
+    password = st.text_input("Enter admin password", type="password")
+    if st.button("Login"):
+        if password == ADMIN_PASSWORD:
+            st.session_state.admin_auth = True
+            st.rerun()
+        else:
+            st.error("Wrong password")
+    st.stop()
+
+# ---------- Admin Interface ----------
+st.markdown("""
+<div style="text-align: center; padding: 1rem 0;">
+    <h1 style="font-family: 'EB Garamond', Georgia, serif; color: #FFD700;
+               font-size: 2rem; letter-spacing: 2px;">
+        POOL ADMIN
+    </h1>
+</div>
+""", unsafe_allow_html=True)
 
 # ---------- Sidebar: Tournament Selector ----------
 tournaments = list_tournaments()
@@ -35,7 +84,6 @@ tournament_names = [f"{t['name']} ({t['start_date'].strftime('%b %d')})" for t i
 
 st.sidebar.header("Tournaments")
 
-# Create new tournament
 with st.sidebar.expander("Create New Tournament"):
     new_name = st.text_input("Tournament name", placeholder="RBC Heritage 2026")
     new_espn = st.text_input("ESPN event name (for matching)", placeholder="RBC Heritage")
@@ -63,13 +111,13 @@ tournament = tournaments[selected_idx]
 tid = tournament["id"]
 
 # ---------- Tournament Status ----------
-st.header(f"{tournament['name']}")
+st.subheader(tournament["name"])
 
 col_status, col_entries, col_actions = st.columns([2, 1, 3])
 
 with col_status:
-    status_colors = {"setup": "🔧", "open": "🟢", "locked": "🔒", "live": "📡", "final": "🏁"}
-    st.metric("Status", f"{status_colors.get(tournament['status'], '')} {tournament['status'].upper()}")
+    status_icons = {"setup": "🔧", "open": "🟢", "locked": "🔒", "live": "📡", "final": "🏁"}
+    st.metric("Status", f"{status_icons.get(tournament['status'], '')} {tournament['status'].upper()}")
 
 with col_entries:
     entry_count = get_entry_count(tid)
@@ -88,7 +136,7 @@ with col_actions:
 st.divider()
 
 # ---------- Tier Configuration ----------
-st.header("Tier Setup")
+st.subheader("Tier Setup")
 
 existing_tiers = get_tiers(tid)
 players_by_tier = get_players_by_tier(tid)
@@ -109,7 +157,6 @@ if existing_tiers:
 
     st.divider()
 
-# ---------- Add New Tiers ----------
 with st.expander("Configure Tiers" if not existing_tiers else "Add More Tiers"):
     st.write("Define your tier structure. Each tier has a rank range and number of picks required.")
 
@@ -145,7 +192,7 @@ with st.expander("Configure Tiers" if not existing_tiers else "Add More Tiers"):
 # ---------- Player Assignment ----------
 if existing_tiers:
     st.divider()
-    st.header("Players")
+    st.subheader("Players")
 
     st.write(
         "Paste player names for each tier (one per line). "
@@ -173,12 +220,11 @@ if existing_tiers:
                 else:
                     st.warning("No player names entered")
 
-# ---------- Quick View: All Entries ----------
+# ---------- Entries ----------
 if entry_count > 0:
     st.divider()
-    st.header(f"Entries ({entry_count})")
+    st.subheader(f"Entries ({entry_count})")
 
-    from db import get_entries
     entries = get_entries(tid)
     for entry in entries:
         with st.expander(f"{entry['name']} (TB: {entry['tiebreaker']})"):

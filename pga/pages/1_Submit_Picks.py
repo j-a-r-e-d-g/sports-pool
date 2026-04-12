@@ -1,21 +1,16 @@
-# pick_form.py
-# In-app pick submission form for pool participants.
-# Replaces the Google Form — participants pick players from each tier,
-# enter their tiebreaker prediction, and submit directly to Postgres.
-#
-# Features:
-# - Dynamic tiers pulled from the database (configurable per tournament)
-# - Entry lockout when tournament status is locked/live/final
-# - Entry confirmation after successful submission
-# - Allows resubmission (updates existing entry) until lockout
+# Submit Picks page — in-app pick submission form for pool participants.
+# Participants pick players from each tier, enter their tiebreaker
+# prediction, and submit directly to Postgres.
 
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add pga/ to path so we can import db, scoring, etc.
+_pga_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _pga_dir)
 
 from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(os.path.join(_pga_dir, "..", ".env"))
 
 import streamlit as st
 from db import (
@@ -23,11 +18,11 @@ from db import (
     get_players_by_tier, submit_entry, has_entered, get_entry_count,
 )
 
-st.set_page_config(page_title="Submit Your Picks", page_icon="⛳", layout="centered")
+st.set_page_config(page_title="Submit Picks", page_icon="⛳", layout="centered")
 
 init_db()
 
-# ---------- Theme (matches the main leaderboard) ----------
+# ---------- Theme ----------
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
@@ -85,14 +80,12 @@ st.markdown(f"""
 
 # ---------- Pick Form ----------
 with st.form("pick_form"):
-    # Participant name
     name = st.text_input("Your name", placeholder="Enter your name")
 
     st.divider()
 
     # Dynamic tier selections
     picks_by_tier = {}
-    total_picks = 0
 
     for tier in tiers:
         tier_players = players_by_tier.get(tier["id"], [])
@@ -121,11 +114,9 @@ with st.form("pick_form"):
                     selected_players.append(pick)
 
         picks_by_tier[tier["id"]] = selected_players
-        total_picks += len(selected_players)
 
     st.divider()
 
-    # Tiebreaker
     tiebreaker = st.number_input(
         "Tiebreaker: Predict the winning score (relative to par, e.g. -12)",
         min_value=-30,
@@ -134,24 +125,20 @@ with st.form("pick_form"):
         step=1,
     )
 
-    # Submit
     submitted = st.form_submit_button("Submit Picks", type="primary", use_container_width=True)
 
 if submitted:
-    # Validation
     errors = []
 
     if not name or not name.strip():
         errors.append("Please enter your name")
 
-    # Check for correct number of picks per tier
     for tier in tiers:
         selected = picks_by_tier.get(tier["id"], [])
         if len(selected) != tier["picks_required"]:
             errors.append(f"{tier['label']}: select {tier['picks_required']} player(s) "
                          f"(you picked {len(selected)})")
 
-    # Check for duplicate picks within a tier
     for tier in tiers:
         selected = picks_by_tier.get(tier["id"], [])
         if len(selected) != len(set(selected)):
@@ -161,12 +148,10 @@ if submitted:
         for err in errors:
             st.error(err)
     else:
-        # Check if tournament is still open
         fresh = get_tournament(tid)
         if fresh["status"] != "open":
             st.error("This tournament is no longer accepting picks!")
         else:
-            # Submit to database
             already_entered = has_entered(tid, name.strip())
             entry_id = submit_entry(tid, name.strip(), tiebreaker, picks_by_tier)
 
@@ -177,7 +162,6 @@ if submitted:
 
             st.balloons()
 
-            # Show confirmation
             st.markdown("---")
             st.markdown("**Your picks:**")
             for tier in tiers:
