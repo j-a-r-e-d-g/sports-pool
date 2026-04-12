@@ -1,12 +1,12 @@
 # app.py
-# Streamlit web app for the 2026 Masters Pool leaderboard.
+# Streamlit web app for the PGA pool leaderboard.
 # Run with: streamlit run pga/app.py
 #
 # Augusta National themed — white scoreboards, Masters green, red for under par.
 # Tabs: Pool Standings | Player Breakdowns | Tournament Leaderboard | Rules
 #
-# Pulls picks from Google Form responses when available,
-# falls back to sample data for testing.
+# Loads picks from Postgres for DB tournaments, falls back to Google Sheets
+# for the legacy Masters 2026 pool.
 #
 # Auto-refreshes every 15 minutes during tournament hours (8am–8pm ET).
 
@@ -18,11 +18,18 @@ import os
 # the repo root (Streamlit Cloud runs: streamlit run pga/app.py)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Load .env for local development (DATABASE_URL)
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
+
 import streamlit as st
-import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from scoring import calculate_leaderboard
+from db import init_db, list_tournaments, get_tiers, get_entries
+
+# Ensure database tables exist
+init_db()
 
 # ---------- Page Config (must be first Streamlit call) ----------
 st.set_page_config(
@@ -275,8 +282,18 @@ def rank_html(rank):
 
 # ---------- Data Loading ----------
 @st.cache_data(ttl=REFRESH_INTERVAL_SEC)
-def load_picks():
-    """Load picks from Google Form responses, cached for 15 min."""
+def load_picks_from_db(tournament_id):
+    """Load picks from Postgres for the given tournament."""
+    try:
+        return get_entries(tournament_id)
+    except Exception as e:
+        st.error(f"Error loading picks: {e}")
+        return []
+
+
+@st.cache_data(ttl=REFRESH_INTERVAL_SEC)
+def load_picks_from_sheets():
+    """Legacy: load picks from Google Form responses (Masters 2026)."""
     try:
         from sheets_reader import fetch_picks
         return fetch_picks()
@@ -286,9 +303,17 @@ def load_picks():
 
 
 @st.cache_data(ttl=REFRESH_INTERVAL_SEC)
-def load_live_scores():
-    """Load live Masters scores from ESPN, cached for 15 min."""
+def load_espn_scores(espn_event_name):
+    """Load live scores from ESPN, matching by event name."""
     try:
+        from live_scores import fetch_scoreboard, parse_tournament_scores
+        data = fetch_scoreboard()
+        if not data:
+            return None
+        for event in data.get("events", []):
+            if espn_event_name and espn_event_name.lower() in event.get("name", "").lower():
+                return parse_tournament_scores(event)
+        # Fallback: try the Masters-specific matcher
         from live_scores import get_live_masters_scores
         return get_live_masters_scores()
     except Exception:
@@ -305,8 +330,42 @@ def load_current_tournament():
         return None, None
 
 
-real_picks = load_picks()
-live_scores = load_live_scores()
+# ---------- Tournament Selection ----------
+# Show DB tournaments plus the legacy Masters entry
+db_tournaments = list_tournaments()
+active_db = [t for t in db_tournaments if t["status"] in ("open", "locked", "live", "final")]
+
+# Build tournament options: DB tournaments + legacy Masters
+tournament_options = []
+for t in active_db:
+    tournament_options.append({"label": t["name"], "db": t})
+# Add legacy Masters option if no DB tournaments exist yet
+if not active_db:
+    tournament_options.append({"label": "Masters 2026 (legacy)", "db": None})
+
+if len(tournament_options) > 1:
+    selected_idx = st.selectbox(
+        "Tournament",
+        range(len(tournament_options)),
+        format_func=lambda i: tournament_options[i]["label"],
+    )
+    active_tournament = tournament_options[selected_idx]
+else:
+    active_tournament = tournament_options[0]
+
+# Load data based on source
+db_tourney = active_tournament.get("db")
+if db_tourney:
+    real_picks = load_picks_from_db(db_tourney["id"])
+    espn_name = db_tourney.get("espn_event_name", "")
+    live_scores = load_espn_scores(espn_name)
+    pool_tiers = get_tiers(db_tourney["id"])
+else:
+    # Legacy Masters path
+    real_picks = load_picks_from_sheets()
+    live_scores = load_espn_scores("Masters")
+    pool_tiers = None
+
 current_event_name, current_event_scores = load_current_tournament()
 
 # Auto-refresh during tournament hours
@@ -316,17 +375,17 @@ if is_tournament_hours():
 # ---------- Data Source ----------
 if real_picks:
     participants = real_picks
-    data_source_picks = f"{len(participants)} entries from Google Form"
+    data_source_picks = f"{len(participants)} entries"
 else:
     participants = []
-    data_source_picks = "No form responses yet"
+    data_source_picks = "No entries yet"
 
 if live_scores:
     tournament_scores = live_scores
     data_source_scores = "Live from ESPN"
 else:
     tournament_scores = {}
-    data_source_scores = "Masters not live yet"
+    data_source_scores = "Not live yet"
 
 # ---------- Calculate Standings ----------
 leaderboard = calculate_leaderboard(participants, tournament_scores)
@@ -378,8 +437,8 @@ st.html(f"""
     }}
 </style>
 <div class="masters-header">
-    <h1>THE MASTERS POOL</h1>
-    <div class="subtitle">Augusta National Golf Club &middot; 2026</div>
+    <h1>{db_tourney['name'].upper() + ' POOL' if db_tourney else 'THE MASTERS POOL'}</h1>
+    <div class="subtitle">{'PGA Tour' if db_tourney else 'Augusta National Golf Club'} &middot; 2026</div>
     <div class="azalea-divider">&#10047; &#10047; &#10047; &#10047; &#10047;</div>
 </div>
 <div class="status-bar">
@@ -597,16 +656,23 @@ with tab_rules:
     {SHARED_STYLES}
     <div class="rules-card">
         <h3>Pool Format</h3>
-        <p>Pick <strong>2 players from each tier</strong> (10 total). Your score is the
-        cumulative to-par total across all 10 players. <strong>Lowest score wins.</strong></p>
+        <p>Pick players from each tier (see below). Your score is the
+        cumulative to-par total across all your picks. <strong>Lowest score wins.</strong></p>
 
         <table>
             <tr><th>Tier</th><th>Players Ranked</th><th>Picks</th></tr>
+            {''.join(
+                f'<tr><td>{t["label"]}</td>'
+                f'<td>{t["rank_min"]} &ndash; {t["rank_max"] if t["rank_max"] else "+"}</td>'
+                f'<td>{t["picks_required"]}</td></tr>'
+                for t in pool_tiers
+            ) if pool_tiers else """
             <tr><td>Tier 1</td><td>1 &ndash; 10</td><td>2</td></tr>
             <tr><td>Tier 2</td><td>11 &ndash; 20</td><td>2</td></tr>
             <tr><td>Tier 3</td><td>21 &ndash; 40</td><td>2</td></tr>
             <tr><td>Tier 4</td><td>41 &ndash; 70</td><td>2</td></tr>
             <tr><td>Tier 5</td><td>71+</td><td>2</td></tr>
+            """}
         </table>
 
         <h3>Missed Cut Penalty</h3>

@@ -4,6 +4,7 @@ credentials.json
 token.json
 form_config.json
 .streamlit/secrets.toml
+.streamlit/secrets.toml.bak
 
 # Python junk
 __pycache__/

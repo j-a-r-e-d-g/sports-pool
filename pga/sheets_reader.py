@@ -13,13 +13,12 @@
 #   M: Tiebreaker prediction
 
 import os
-import json
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-# Same scopes as form_generator — reuses the same token
+# Google API scopes needed for reading the picks spreadsheet
 SCOPES = [
     "https://www.googleapis.com/auth/forms.body",
     "https://www.googleapis.com/auth/forms.responses.readonly",
@@ -30,7 +29,6 @@ SCOPES = [
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
 CREDENTIALS_FILE = os.path.join(PROJECT_ROOT, "credentials.json")
 TOKEN_FILE = os.path.join(PROJECT_ROOT, "token.json")
-CONFIG_FILE = os.path.join(PROJECT_ROOT, "form_config.json")
 
 
 def _is_cloud():
