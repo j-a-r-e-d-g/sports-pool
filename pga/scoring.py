@@ -30,6 +30,9 @@ SPECIAL_CHARS = {
 NAME_ALIASES = {
     "christopher gotterup": "chris gotterup",
     "pongsapak laopakdee": "fifa laopakdee",
+    "matthew fitzpatrick": "matt fitzpatrick",
+    "alexander noren": "alex noren",
+    "j. j. spaun": "j.j. spaun",
 }
 
 

@@ -63,6 +63,8 @@ def authenticate():
     except Exception as e:
         if on_cloud:
             raise RuntimeError(f"Cloud auth failed: {e}")
+        # Reset creds so stale Streamlit secrets don't poison the local flow
+        creds = None
 
     # Local only from here — never touch filesystem on cloud
     if on_cloud:

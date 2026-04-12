@@ -53,10 +53,18 @@ def parse_tournament_scores(event):
         {
             "score": int (relative to par, e.g. -11),
             "made_cut": bool,
+            "wd_round": int or None,
             "finish_position": int or None,
         }
+
+    Two post-processing steps run after initial parsing:
+    1. Missed cut detection from linescores (ESPN often leaves status empty)
+    2. Finish position assignment with proper tie handling
     """
     scores = {}
+    competitor_linescores = {}  # Round-by-round scores for cut detection
+
+    event_status = event.get("status", {}).get("type", {}).get("name", "").upper()
 
     # ESPN nests competitors inside competitions
     for competition in event.get("competitions", []):
@@ -89,26 +97,93 @@ def parse_tournament_scores(event):
                 # Clamp to valid range 1-4
                 wd_round = max(1, min(4, period)) if period >= 1 else 1
 
-            # Finish position (only set if tournament is complete or player is done)
-            # ESPN uses "order" for current position on the leaderboard
-            position = competitor.get("order")
-            # Only treat as final finish position if the event is complete
-            # Case-insensitive check for safety
-            event_status = event.get("status", {}).get("type", {}).get("name", "").upper()
-            if event_status == "STATUS_FINAL":
-                finish_position = position if position and position > 0 else None
-            else:
-                finish_position = None
+            # Store linescores for missed cut detection
+            competitor_linescores[name] = competitor.get("linescores", [])
 
             scores[name] = {
                 "score": score,
                 "made_cut": made_cut,
                 "wd_round": wd_round,
-                "finish_position": finish_position,
+                "finish_position": None,
             }
+
+    # ESPN often doesn't set cut status — detect from R3 linescores instead
+    _detect_missed_cuts(scores, competitor_linescores)
+
+    # Compute finish positions with proper tie handling (not ESPN's sequential order)
+    if event_status == "STATUS_FINAL":
+        _assign_finish_positions(scores)
 
     print(f"Parsed scores for {len(scores)} players.")
     return scores
+
+
+def _detect_missed_cuts(scores, competitor_linescores):
+    """
+    Detect missed cuts from Round 3 linescores.
+
+    ESPN doesn't always populate the cut status field. Once Round 3 is
+    complete, we can reliably tell: any player who completed R1 and R2
+    but has R3 = 0 missed the cut.
+
+    Waits until ALL made-cut players have finished R3 (every non-zero R3
+    score is a full round, >= 60 strokes) to avoid false positives from
+    players who simply haven't teed off yet.
+    """
+    # Gather all non-zero R3 scores
+    r3_values = []
+    for linescores in competitor_linescores.values():
+        if len(linescores) >= 3:
+            r3_val = linescores[2].get("value", 0)
+            if r3_val > 0:
+                r3_values.append(r3_val)
+
+    # R3 must be complete: need scores, and every one must be a finished
+    # round (>= 60 strokes). Mid-round values like 14 mean R3 is still
+    # in progress — don't flag cuts yet.
+    if not r3_values or not all(v >= 60 for v in r3_values):
+        return
+
+    cut_count = 0
+    for name, linescores in competitor_linescores.items():
+        if len(linescores) >= 3:
+            r1 = linescores[0].get("value", 0)
+            r2 = linescores[1].get("value", 0)
+            r3 = linescores[2].get("value", 0)
+            # Completed R1 and R2 but no R3 → missed the cut
+            if r1 > 0 and r2 > 0 and r3 == 0:
+                if name in scores and scores[name]["made_cut"]:
+                    scores[name]["made_cut"] = False
+                    cut_count += 1
+
+    if cut_count > 0:
+        print(f"Detected {cut_count} missed cuts from R3 linescores.")
+
+
+def _assign_finish_positions(scores):
+    """
+    Assign finish positions with proper tie handling.
+
+    Players with the same score share the same position:
+      scores [-12, -10, -10, -8] → positions [1, 2, 2, 4]
+
+    This matters for bonuses: two players tied for 2nd both get the
+    2nd-place bonus (-14), nobody gets 3rd, and the next player is 4th.
+    ESPN's "order" field is sequential and doesn't account for ties.
+    """
+    # Only rank players who finished the tournament (made cut, no WD)
+    eligible = [
+        (name, data) for name, data in scores.items()
+        if data.get("made_cut", True) and data.get("wd_round") is None
+    ]
+    eligible.sort(key=lambda x: x[1]["score"])
+
+    current_pos = 1
+    for i, (name, data) in enumerate(eligible):
+        # New score = new position (accounts for ties above)
+        if i > 0 and data["score"] > eligible[i - 1][1]["score"]:
+            current_pos = i + 1
+        scores[name]["finish_position"] = current_pos
 
 
 def get_live_masters_scores():
