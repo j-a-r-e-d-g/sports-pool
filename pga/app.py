@@ -354,17 +354,18 @@ def load_current_tournament():
 
 
 # ---------- Tournament Selection ----------
-# Show DB tournaments plus the legacy Masters entry
+# Show active (non-archived) DB tournaments on the leaderboard.
+# Final tournaments live in the Archives page.
 db_tournaments = list_tournaments()
-active_db = [t for t in db_tournaments if t["status"] in ("open", "locked", "live", "final")]
+active_db = [t for t in db_tournaments if t["status"] in ("open", "locked", "live")]
 
-# Build tournament options: DB tournaments + legacy Masters
+# Build tournament options
 tournament_options = []
 for t in active_db:
     tournament_options.append({"label": t["name"], "db": t})
-# Add legacy Masters option if no DB tournaments exist yet
+# If no active tournaments, show a placeholder
 if not active_db:
-    tournament_options.append({"label": "Masters 2026 (legacy)", "db": None})
+    tournament_options.append({"label": "No active tournament", "db": None})
 
 if len(tournament_options) > 1:
     selected_idx = st.selectbox(

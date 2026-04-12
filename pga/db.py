@@ -101,6 +101,18 @@ def init_db():
                     tier_id INT NOT NULL REFERENCES tiers(id) ON DELETE CASCADE,
                     player_name TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS results (
+                    id SERIAL PRIMARY KEY,
+                    tournament_id INT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+                    participant_name TEXT NOT NULL,
+                    rank INT NOT NULL,
+                    total INT NOT NULL,
+                    tiebreaker INT,
+                    tiebreaker_diff FLOAT,
+                    player_details JSONB NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
             """)
 
 
@@ -308,3 +320,66 @@ def has_entered(tournament_id, participant_name):
                 (tournament_id, participant_name),
             )
             return cur.fetchone()[0] > 0
+
+
+# ---------- Results (Archives) ----------
+
+def save_results(tournament_id, leaderboard):
+    """
+    Snapshot final leaderboard results for a tournament.
+    Stores each participant's rank, total, tiebreaker, and full
+    per-player breakdown as JSONB so archives don't need ESPN data.
+
+    leaderboard: list of dicts from calculate_leaderboard()
+    """
+    import json
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            # Clear any existing results for this tournament
+            cur.execute("DELETE FROM results WHERE tournament_id = %s", (tournament_id,))
+            for entry in leaderboard:
+                cur.execute(
+                    "INSERT INTO results "
+                    "(tournament_id, participant_name, rank, total, tiebreaker, tiebreaker_diff, player_details) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        tournament_id,
+                        entry["name"],
+                        entry["rank"],
+                        entry["total"],
+                        entry.get("tiebreaker"),
+                        entry.get("tiebreaker_diff"),
+                        json.dumps(entry["players"]),
+                    ),
+                )
+
+
+def get_results(tournament_id):
+    """
+    Get archived results for a tournament, sorted by rank.
+    Returns a list of dicts with rank, name, total, tiebreaker, player_details.
+    """
+    import json
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM results WHERE tournament_id = %s ORDER BY rank",
+                (tournament_id,),
+            )
+            rows = cur.fetchall()
+            for row in rows:
+                if isinstance(row["player_details"], str):
+                    row["player_details"] = json.loads(row["player_details"])
+            return rows
+
+
+def get_archived_tournaments():
+    """Get all tournaments that have archived results."""
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT DISTINCT t.* FROM tournaments t "
+                "JOIN results r ON t.id = r.tournament_id "
+                "ORDER BY t.start_date DESC"
+            )
+            return cur.fetchall()

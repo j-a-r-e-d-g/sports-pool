@@ -16,6 +16,7 @@ from db import (
     init_db, create_tournament, list_tournaments, get_tournament,
     update_tournament_status, create_tier, get_tiers, delete_tiers,
     add_players, get_players_by_tier, get_entry_count, get_entries,
+    save_results,
 )
 
 st.set_page_config(page_title="Pool Admin", page_icon="⛳", layout="wide")
@@ -132,6 +133,37 @@ with col_actions:
             if st.button(s.upper(), key=f"status_{s}"):
                 update_tournament_status(tid, s)
                 st.rerun()
+
+# ---------- Archive Results ----------
+if tournament["status"] in ("live", "final") and entry_count > 0:
+    st.write("**Archive results:**")
+    st.caption(
+        "Snapshot the current leaderboard to the Archives page. "
+        "Requires live ESPN scores. Safe to run multiple times — overwrites previous snapshot."
+    )
+    if st.button("Archive Results", type="primary"):
+        try:
+            from live_scores import parse_tournament_scores
+            from scoring import calculate_leaderboard
+
+            espn_name = tournament.get("espn_event_name") or tournament["name"]
+            scores = parse_tournament_scores(espn_name)
+            if not scores:
+                st.error("Could not load ESPN scores. Make sure the ESPN event name matches.")
+            else:
+                entries = get_entries(tid)
+                tiers = get_tiers(tid)
+                pool_tiers = [
+                    {"label": t["label"], "rank_min": t["rank_min"],
+                     "rank_max": t["rank_max"], "picks_required": t["picks_required"]}
+                    for t in tiers
+                ]
+                leaderboard = calculate_leaderboard(entries, scores)
+                save_results(tid, leaderboard)
+                st.success(f"Archived {len(leaderboard)} results for {tournament['name']}!")
+                st.balloons()
+        except Exception as e:
+            st.error(f"Error archiving results: {e}")
 
 st.divider()
 
