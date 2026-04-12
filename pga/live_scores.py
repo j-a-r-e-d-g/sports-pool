@@ -110,30 +110,13 @@ def parse_tournament_scores(event):
     # ESPN often doesn't set cut status — detect from R3 linescores instead
     _detect_missed_cuts(scores, competitor_linescores)
 
-    # Compute finish positions with proper tie handling (not ESPN's sequential order)
-    # Also assign if all R4 rounds are done — ESPN can be slow to flip STATUS_FINAL
-    r4_complete = _all_r4_complete(competitor_linescores)
-    if event_status == "STATUS_FINAL" or r4_complete:
-        _assign_finish_positions(scores)
+    # Always compute projected finish positions so bonuses show live.
+    # Positions update every refresh as scores change during the tournament.
+    _assign_finish_positions(scores)
 
     print(f"Parsed scores for {len(scores)} players.")
     return scores
 
-
-def _all_r4_complete(competitor_linescores):
-    """
-    Check if all players who made it to R4 have completed their round.
-    A completed R4 score is >= 60 strokes (a full round of golf).
-    Returns True if every non-zero R4 score is a finished round and
-    at least some players have R4 scores.
-    """
-    r4_values = []
-    for linescores in competitor_linescores.values():
-        if len(linescores) >= 4:
-            r4_val = linescores[3].get("value", 0)
-            if r4_val > 0:
-                r4_values.append(r4_val)
-    return len(r4_values) > 0 and all(v >= 60 for v in r4_values)
 
 
 def _detect_missed_cuts(scores, competitor_linescores):

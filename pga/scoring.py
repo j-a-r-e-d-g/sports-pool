@@ -144,7 +144,7 @@ def calculate_player_score(player_data):
     made_cut = player_data.get("made_cut", True)
     mc_penalty = calculate_missed_cut_penalty(made_cut) if wd_round is None else 0
 
-    # Placement bonus only applies if the tournament is over
+    # Placement bonus — applies live based on projected finish position
     finish_position = player_data.get("finish_position")
     bonus = get_placement_bonus(finish_position) if finish_position else 0
 

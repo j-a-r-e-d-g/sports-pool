@@ -97,6 +97,31 @@ SHARED_STYLES = """
     .score-mc { color: #8B4513; font-style: italic; }
     .score-wd { color: #8B0000; font-style: italic; }
 
+    /* Bonus badge — green pill for projected placement bonus */
+    .bonus-badge {
+        display: inline-block;
+        background-color: #006747; color: #FFD700;
+        padding: 2px 8px; border-radius: 12px;
+        font-size: 0.78rem; font-weight: 700;
+    }
+    .bonus-none { color: #999; font-size: 0.8rem; }
+
+    /* Pool pick indicator */
+    .picked-tag {
+        display: inline-block;
+        background-color: #e8f5e9; color: #2e7d32;
+        padding: 1px 6px; border-radius: 4px;
+        font-size: 0.72rem; font-weight: 600;
+        margin: 1px 2px;
+    }
+    .tier-tag {
+        display: inline-block;
+        background-color: #fff3e0; color: #e65100;
+        padding: 1px 5px; border-radius: 4px;
+        font-size: 0.7rem; font-weight: 600;
+        margin-right: 3px;
+    }
+
     /* Rank badge */
     .rank-badge {
         display: inline-block;
@@ -589,9 +614,9 @@ with tab_breakdowns:
 
 # ==================== TAB 3: TOURNAMENT LEADERBOARD ====================
 with tab_tournament:
-    # Use live ESPN data: Masters scores if available, otherwise this week's event
+    # Use live ESPN data: current tournament scores if available
     if live_scores:
-        tourney_title = "Masters Tournament Leaderboard"
+        tourney_title = db_tourney["name"] if db_tourney else "Masters Tournament"
         tourney_data = live_scores
     elif current_event_scores:
         tourney_title = f"{current_event_name} (Live from ESPN)"
@@ -599,6 +624,37 @@ with tab_tournament:
     else:
         tourney_title = "Tournament Leaderboard"
         tourney_data = {}
+
+    # Build lookup: which players were picked by whom (and what tier)
+    # normalize names for matching across form picks vs ESPN names
+    from scoring import normalize_name, get_placement_bonus
+
+    pick_lookup = {}  # normalized_name -> [(participant, tier_label), ...]
+    if participants and pool_tiers:
+        for entry in participants:
+            for i, player_name in enumerate(entry.get("picks", [])):
+                if not player_name:
+                    continue
+                # Figure out which tier this pick belongs to
+                picks_so_far = 0
+                tier_label = ""
+                for tier in pool_tiers:
+                    if picks_so_far <= i < picks_so_far + tier["picks_required"]:
+                        tier_label = tier["label"]
+                        break
+                    picks_so_far += tier["picks_required"]
+                norm = normalize_name(player_name)
+                pick_lookup.setdefault(norm, []).append((entry["name"], tier_label))
+    elif participants:
+        # Legacy Masters: infer tiers from pick position (2 per tier)
+        tier_labels = ["Tier 1", "Tier 2", "Tier 3", "Tier 4", "Tier 5"]
+        for entry in participants:
+            for i, player_name in enumerate(entry.get("picks", [])):
+                if not player_name:
+                    continue
+                tier_label = tier_labels[i // 2] if i // 2 < len(tier_labels) else ""
+                norm = normalize_name(player_name)
+                pick_lookup.setdefault(norm, []).append((entry["name"], tier_label))
 
     sorted_players = sorted(
         tourney_data.items(),
@@ -621,25 +677,48 @@ with tab_tournament:
         else:
             status = ""
 
+        # Bonus column
+        bonus = get_placement_bonus(pos) if pos else 0
+        if bonus < 0:
+            bonus_cell = f'<span class="bonus-badge">{bonus}</span>'
+        else:
+            bonus_cell = '<span class="bonus-none">&mdash;</span>'
+
+        # Pool picks column — who picked this player and from what tier
+        norm_name = normalize_name(name)
+        pickers = pick_lookup.get(norm_name, [])
+        if pickers:
+            picker_tags = ""
+            for participant, tier_label in pickers:
+                tier_html = f'<span class="tier-tag">{tier_label}</span>' if tier_label else ""
+                picker_tags += f'{tier_html}<span class="picked-tag">{participant}</span> '
+            picked_cell = picker_tags
+        else:
+            picked_cell = ""
+
         tourney_rows_html += f"""
         <tr>
             <td>{pos_str}</td>
             <td>{name}</td>
             <td>{score_html(score)}</td>
+            <td>{bonus_cell}</td>
             <td>{status}</td>
+            <td>{picked_cell}</td>
         </tr>"""
 
     st.html(f"""
     {SHARED_STYLES}
     <div class="scoreboard">
-        <h3>{tourney_title}</h3>
+        <h3>{tourney_title} Leaderboard</h3>
         <table class="leaderboard-table">
             <thead>
                 <tr>
                     <th>Pos</th>
                     <th>Player</th>
                     <th>Score</th>
+                    <th>Bonus</th>
                     <th>Status</th>
+                    <th>Picked By</th>
                 </tr>
             </thead>
             <tbody>
