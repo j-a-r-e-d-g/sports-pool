@@ -11,23 +11,17 @@ load_dotenv(os.path.join(_pga_dir, "..", ".env"))
 
 import streamlit as st
 from db import init_db, get_archived_tournaments, get_results
+from themes import get_theme, theme_css, shared_styles, header_html, DEFAULT_THEME
 
 st.set_page_config(page_title="Pool Archives", page_icon="⛳", layout="wide")
 
 init_db()
 
-# ---------- Theme ----------
-THEME_CSS = """
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
-    .stApp { background-color: #006747; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-</style>
-"""
-st.markdown(THEME_CSS, unsafe_allow_html=True)
+# ---------- Theme (default until tournament selected) ----------
+st.markdown(theme_css(DEFAULT_THEME), unsafe_allow_html=True)
 
 # ---------- Shared Styles for HTML blocks ----------
+# Will be overridden once a tournament is selected
 SHARED_STYLES = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
@@ -134,16 +128,7 @@ def rank_html(rank):
 
 
 # ---------- Header ----------
-st.markdown("""
-<div style="text-align: center; padding: 1.5rem 0 0.5rem;">
-    <h1 style="font-family: 'EB Garamond', Georgia, serif; color: #FFD700;
-               font-size: 2.4rem; letter-spacing: 2px;">
-        POOL ARCHIVES
-    </h1>
-    <p style="color: #c0c0b0; font-family: 'EB Garamond', Georgia, serif;
-              font-style: italic;">Past tournament results</p>
-</div>
-""", unsafe_allow_html=True)
+st.html(header_html(DEFAULT_THEME, "POOL ARCHIVES", "Past tournament results"))
 
 # ---------- Load Archives ----------
 archived = get_archived_tournaments()
@@ -156,10 +141,15 @@ if not archived:
 selected_idx = st.selectbox(
     "Select tournament",
     range(len(archived)),
-    format_func=lambda i: f"{archived[i]['name']} — {archived[i]['start_date'].strftime('%B %d, %Y')}",
+    format_func=lambda i: "%s — %s" % (archived[i]["name"], archived[i]["start_date"].strftime("%B %d, %Y")),
 )
 tournament = archived[selected_idx]
 results = get_results(tournament["id"])
+
+# Apply selected tournament's theme
+_theme = get_theme(tournament)
+st.markdown(theme_css(_theme), unsafe_allow_html=True)
+SHARED_STYLES = shared_styles(_theme)
 
 if not results:
     st.warning("No results found for this tournament.")

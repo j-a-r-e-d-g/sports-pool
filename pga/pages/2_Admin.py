@@ -14,25 +14,20 @@ import streamlit as st
 from datetime import datetime, date, time
 from db import (
     init_db, create_tournament, list_tournaments, get_tournament,
-    update_tournament_status, create_tier, get_tiers, delete_tiers,
+    update_tournament_status, update_tournament_theme,
+    create_tier, get_tiers, delete_tiers,
     add_players, get_players_by_tier, get_entry_count, get_entries,
     save_results,
 )
+from themes import get_theme, theme_css, PRESETS
 
 st.set_page_config(page_title="Pool Admin", page_icon="⛳", layout="wide")
 
 init_db()
 
-# ---------- Theme ----------
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
-    .stApp { background-color: #006747; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
+# ---------- Theme (default until tournament selected) ----------
+from themes import DEFAULT_THEME
+st.markdown(theme_css(DEFAULT_THEME), unsafe_allow_html=True)
 
 # ---------- Password Gate ----------
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
@@ -53,12 +48,12 @@ if "admin_auth" not in st.session_state:
 if not st.session_state.admin_auth:
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0;">
-        <h1 style="font-family: 'EB Garamond', Georgia, serif; color: #FFD700;
+        <h1 style="font-family: 'EB Garamond', Georgia, serif; color: %s;
                    font-size: 2rem; letter-spacing: 2px;">
             POOL ADMIN
         </h1>
     </div>
-    """, unsafe_allow_html=True)
+    """ % DEFAULT_THEME["primary"], unsafe_allow_html=True)
 
     password = st.text_input("Enter admin password", type="password")
     if st.button("Login"):
@@ -72,12 +67,12 @@ if not st.session_state.admin_auth:
 # ---------- Admin Interface ----------
 st.markdown("""
 <div style="text-align: center; padding: 1rem 0;">
-    <h1 style="font-family: 'EB Garamond', Georgia, serif; color: #FFD700;
+    <h1 style="font-family: 'EB Garamond', Georgia, serif; color: %s;
                font-size: 2rem; letter-spacing: 2px;">
         POOL ADMIN
     </h1>
 </div>
-""", unsafe_allow_html=True)
+""" % DEFAULT_THEME["primary"], unsafe_allow_html=True)
 
 # ---------- Sidebar: Tournament Selector ----------
 tournaments = list_tournaments()
@@ -164,6 +159,52 @@ if tournament["status"] in ("live", "final") and entry_count > 0:
                 st.balloons()
         except Exception as e:
             st.error(f"Error archiving results: {e}")
+
+# ---------- Theme ----------
+st.subheader("Theme")
+preset_keys = list(PRESETS.keys())
+preset_labels = [PRESETS[k]["name"] for k in preset_keys]
+
+# Find current preset
+current_theme = tournament.get("theme") or {}
+current_preset_idx = 0
+for i, key in enumerate(preset_keys):
+    preset = PRESETS[key]
+    if (current_theme.get("bg") == preset["bg"]
+            and current_theme.get("primary") == preset["primary"]):
+        current_preset_idx = i
+        break
+
+selected_preset = st.selectbox(
+    "Color scheme",
+    range(len(preset_keys)),
+    index=current_preset_idx,
+    format_func=lambda i: preset_labels[i],
+)
+
+chosen = PRESETS[preset_keys[selected_preset]]
+# Preview
+st.markdown(
+    '<div style="display: flex; gap: 8px; align-items: center;">'
+    '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
+    '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
+    '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
+    '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
+    '<span style="color: #f5f5f0; margin-left: 8px;">BG &middot; Dark &middot; Primary &middot; Accent</span>'
+    '</div>' % (chosen["bg"], chosen["bg_dark"], chosen["primary"], chosen["accent"]),
+    unsafe_allow_html=True,
+)
+
+if st.button("Apply Theme"):
+    theme_data = {
+        "bg": chosen["bg"],
+        "bg_dark": chosen["bg_dark"],
+        "primary": chosen["primary"],
+        "accent": chosen["accent"],
+    }
+    update_tournament_theme(tid, theme_data)
+    st.success(f"Applied {chosen['name']} theme!")
+    st.rerun()
 
 st.divider()
 

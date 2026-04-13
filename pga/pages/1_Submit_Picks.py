@@ -17,42 +17,29 @@ from db import (
     init_db, list_tournaments, get_tournament, get_tiers,
     get_players_by_tier, submit_entry, has_entered, get_entry_count,
 )
+from themes import get_theme, theme_css, header_html
 
 st.set_page_config(page_title="Submit Picks", page_icon="⛳", layout="centered")
 
 init_db()
-
-# ---------- Theme ----------
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
-    .stApp { background-color: #006747; }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div style="text-align: center; padding: 1rem 0;">
-    <h1 style="font-family: 'EB Garamond', Georgia, serif; color: #FFD700;
-               font-size: 2.2rem; margin: 0; letter-spacing: 2px;">
-        SUBMIT YOUR PICKS
-    </h1>
-</div>
-""", unsafe_allow_html=True)
 
 # ---------- Tournament Selection ----------
 tournaments = list_tournaments()
 open_tournaments = [t for t in tournaments if t["status"] == "open"]
 
 if not open_tournaments:
+    # Apply default theme before stopping
+    from themes import DEFAULT_THEME
+    st.markdown(theme_css(DEFAULT_THEME), unsafe_allow_html=True)
     st.warning("No tournaments are currently accepting picks. Check back soon!")
     st.stop()
 
 if len(open_tournaments) == 1:
     tournament = open_tournaments[0]
 else:
+    # Apply default theme for selector
+    from themes import DEFAULT_THEME
+    st.markdown(theme_css(DEFAULT_THEME), unsafe_allow_html=True)
     selected = st.selectbox(
         "Select tournament",
         range(len(open_tournaments)),
@@ -64,19 +51,25 @@ tid = tournament["id"]
 tiers = get_tiers(tid)
 players_by_tier = get_players_by_tier(tid)
 
+# Apply tournament theme
+_theme = get_theme(tournament)
+st.markdown(theme_css(_theme), unsafe_allow_html=True)
+st.html(header_html(_theme, "SUBMIT YOUR PICKS"))
+
 if not tiers:
     st.error("This tournament hasn't been set up yet. Check back soon!")
     st.stop()
 
-st.markdown(f"""
+st.markdown("""
 <div style="text-align: center; color: #f5f5f0; font-family: 'EB Garamond', Georgia, serif;
             font-size: 1.1rem; margin-bottom: 1rem;">
-    {tournament['name']} &middot; {tournament['start_date'].strftime('%B %d, %Y')}
+    %s &middot; %s
     <br><span style="font-size: 0.9rem; color: #c0c0b0;">
-        {get_entry_count(tid)} entries so far
+        %s entries so far
     </span>
 </div>
-""", unsafe_allow_html=True)
+""" % (tournament["name"], tournament["start_date"].strftime("%B %d, %Y"), get_entry_count(tid)),
+unsafe_allow_html=True)
 
 # ---------- Pick Form ----------
 with st.form("pick_form"):

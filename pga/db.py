@@ -66,6 +66,7 @@ def init_db():
                     espn_event_name TEXT,
                     start_date TIMESTAMP NOT NULL,
                     status TEXT NOT NULL DEFAULT 'setup',
+                    theme JSONB,
                     created_at TIMESTAMP DEFAULT NOW()
                 );
 
@@ -113,6 +114,12 @@ def init_db():
                     player_details JSONB NOT NULL,
                     created_at TIMESTAMP DEFAULT NOW()
                 );
+
+                -- Add theme column if it doesn't exist (migration for existing DBs)
+                DO $$ BEGIN
+                    ALTER TABLE tournaments ADD COLUMN theme JSONB;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
             """)
 
 
@@ -153,6 +160,17 @@ def update_tournament_status(tournament_id, status):
             cur.execute(
                 "UPDATE tournaments SET status = %s WHERE id = %s",
                 (status, tournament_id),
+            )
+
+
+def update_tournament_theme(tournament_id, theme_dict):
+    """Update a tournament's theme (JSONB)."""
+    import json
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tournaments SET theme = %s WHERE id = %s",
+                (json.dumps(theme_dict), tournament_id),
             )
 
 
@@ -381,5 +399,22 @@ def get_archived_tournaments():
                 "SELECT DISTINCT t.* FROM tournaments t "
                 "JOIN results r ON t.id = r.tournament_id "
                 "ORDER BY t.start_date DESC"
+            )
+            return cur.fetchall()
+
+
+def get_all_results():
+    """
+    Get all results across all tournaments.
+    Returns list of dicts with tournament_name, participant_name, rank, total.
+    """
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT r.participant_name, r.rank, r.total, "
+                "t.name AS tournament_name, t.start_date "
+                "FROM results r "
+                "JOIN tournaments t ON r.tournament_id = t.id "
+                "ORDER BY t.start_date, r.rank"
             )
             return cur.fetchall()

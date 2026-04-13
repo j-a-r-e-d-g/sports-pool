@@ -27,6 +27,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from scoring import calculate_leaderboard
 from db import init_db, list_tournaments, get_tiers, get_entries
+from themes import get_theme, theme_css, shared_styles, header_html
 
 # Ensure database tables exist
 init_db()
@@ -38,219 +39,13 @@ st.set_page_config(
     layout="wide",
 )
 
-# ---------- Augusta National Theme (CSS only — applied via st.markdown) ----------
-THEME_CSS = """
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
-
-    .stApp {
-        background-color: #006747;
-    }
-
-    /* Tab styling overrides */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 0;
-        background-color: #004d35;
-        border-radius: 8px 8px 0 0;
-        padding: 0 0.5rem;
-    }
-    .stTabs [data-baseweb="tab"] {
-        color: #c0c0b0;
-        font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1rem;
-        padding: 0.7rem 1.2rem;
-        border: none;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #FFD700 !important;
-        border-bottom: 3px solid #FFD700 !important;
-        background-color: transparent;
-    }
-
-    /* Selectbox text color fix */
-    .stSelectbox label {
-        color: #f5f5f0 !important;
-    }
-
-    /* Hide default Streamlit chrome (keep sidebar nav visible) */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-</style>
-"""
-st.markdown(THEME_CSS, unsafe_allow_html=True)
-
-# ---------- Shared CSS for all st.html() blocks ----------
-# This gets injected into every st.html() call since each is its own iframe
-SHARED_STYLES = """
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-
-    /* Score colors — red for under par (golf tradition) */
-    .score-under { color: #CE1141; font-weight: 700; }
-    .score-over { color: #1a1a1a; font-weight: 600; }
-    .score-even { color: #1a1a1a; font-weight: 600; }
-    .score-mc { color: #8B4513; font-style: italic; }
-    .score-wd { color: #8B0000; font-style: italic; }
-
-    /* Bonus badge — green pill for projected placement bonus */
-    .bonus-badge {
-        display: inline-block;
-        background-color: #006747; color: #FFD700;
-        padding: 2px 8px; border-radius: 12px;
-        font-size: 0.78rem; font-weight: 700;
-    }
-    .bonus-none { color: #999; font-size: 0.8rem; }
-
-    /* Pool pick indicator */
-    .picked-tag {
-        display: inline-block;
-        background-color: #e8f5e9; color: #2e7d32;
-        padding: 1px 6px; border-radius: 4px;
-        font-size: 0.72rem; font-weight: 600;
-        margin: 1px 2px;
-    }
-    .tier-tag {
-        display: inline-block;
-        background-color: #fff3e0; color: #e65100;
-        padding: 1px 5px; border-radius: 4px;
-        font-size: 0.7rem; font-weight: 600;
-        margin-right: 3px;
-    }
-
-    /* Rank badge */
-    .rank-badge {
-        display: inline-block;
-        width: 28px; height: 28px; line-height: 28px;
-        text-align: center; border-radius: 50%;
-        font-weight: 700; font-size: 0.85rem;
-    }
-    .rank-1 { background-color: #FFD700; color: #006747; }
-    .rank-2 { background-color: #C0C0C0; color: #333; }
-    .rank-3 { background-color: #CD7F32; color: #fff; }
-    .rank-other { background-color: #e8e8e0; color: #333; }
-
-    /* White scoreboard card */
-    .scoreboard {
-        background-color: #FFFEF7;
-        border-radius: 8px;
-        padding: 1.2rem;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        color: #1a1a1a;
-    }
-    .scoreboard h3 {
-        color: #006747;
-        font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.3rem;
-        border-bottom: 2px solid #006747;
-        padding-bottom: 0.4rem;
-        margin-bottom: 0.8rem;
-    }
-
-    /* Leaderboard table */
-    .leaderboard-table {
-        width: 100%; border-collapse: collapse; font-size: 0.95rem;
-    }
-    .leaderboard-table th {
-        background-color: #006747; color: #FFD700;
-        padding: 0.6rem 0.8rem; text-align: left;
-        font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1rem; font-weight: 600;
-    }
-    .leaderboard-table td {
-        padding: 0.5rem 0.8rem;
-        border-bottom: 1px solid #e0e0d8;
-        color: #1a1a1a;
-    }
-    .leaderboard-table tr:hover { background-color: #f0f0e8; }
-    .leader-row { background-color: #FFF8DC; font-weight: 600; }
-
-    /* Detail card */
-    .detail-card {
-        background-color: #FFFEF7;
-        border-radius: 8px;
-        padding: 1rem 1.2rem;
-        margin-bottom: 0.8rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        color: #1a1a1a;
-    }
-    .detail-card h4 {
-        color: #006747;
-        font-family: 'EB Garamond', Georgia, serif;
-        margin: 0 0 0.6rem 0;
-        font-size: 1.15rem;
-    }
-    .detail-table {
-        width: 100%; border-collapse: collapse; font-size: 0.85rem;
-    }
-    .detail-table th {
-        background-color: #006747; color: #FFD700;
-        padding: 0.4rem 0.6rem; text-align: left; font-size: 0.8rem;
-    }
-    .detail-table td {
-        padding: 0.4rem 0.6rem;
-        border-bottom: 1px solid #e8e8e0;
-        color: #1a1a1a;
-    }
-    .summary-line {
-        margin-top: 0.6rem; font-size: 0.85rem; color: #444;
-    }
-
-    /* Rules card */
-    .rules-card {
-        background-color: #FFFEF7;
-        border-radius: 8px;
-        padding: 1.5rem;
-        color: #1a1a1a;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    .rules-card h3 {
-        color: #006747;
-        font-family: 'EB Garamond', Georgia, serif;
-        border-bottom: 2px solid #006747;
-        padding-bottom: 0.4rem;
-        margin-top: 1.2rem;
-        margin-bottom: 0.6rem;
-    }
-    .rules-card h3:first-child { margin-top: 0; }
-    .rules-card p { margin: 0.5rem 0; line-height: 1.5; }
-    .rules-card table {
-        width: 100%; border-collapse: collapse; margin: 0.8rem 0;
-    }
-    .rules-card table th {
-        background-color: #006747; color: #FFD700;
-        padding: 0.4rem 0.8rem; text-align: left;
-    }
-    .rules-card table td {
-        padding: 0.4rem 0.8rem;
-        border-bottom: 1px solid #e0e0d8;
-    }
-
-    /* Winner banner */
-    .winner-banner {
-        background: linear-gradient(135deg, #006747 0%, #004d35 100%);
-        border: 2px solid #FFD700;
-        border-radius: 8px;
-        padding: 1rem; text-align: center;
-    }
-    .winner-banner span {
-        color: #FFD700;
-        font-family: 'EB Garamond', Georgia, serif;
-        font-size: 1.2rem;
-    }
-
-    /* Mobile responsive */
-    @media (max-width: 768px) {
-        .leaderboard-table { font-size: 0.82rem; }
-        .leaderboard-table th, .leaderboard-table td { padding: 0.4rem; }
-        .detail-table { font-size: 0.78rem; }
-        .detail-table th, .detail-table td { padding: 0.3rem 0.4rem; }
-        .rank-badge { width: 24px; height: 24px; line-height: 24px; font-size: 0.75rem; }
-    }
-</style>
-"""
+# ---------- Theme ----------
+# Theme is applied dynamically after tournament selection.
+# A default is used initially so the page doesn't flash white.
+from themes import DEFAULT_THEME
+_current_theme = DEFAULT_THEME
+st.markdown(theme_css(_current_theme), unsafe_allow_html=True)
+SHARED_STYLES = shared_styles(_current_theme)
 
 # ---------- Auto-Refresh Config ----------
 TOURNAMENT_TZ = ZoneInfo("America/New_York")
@@ -390,6 +185,11 @@ else:
     live_scores = load_espn_scores("Masters")
     pool_tiers = None
 
+# Apply tournament theme
+_current_theme = get_theme(db_tourney)
+st.markdown(theme_css(_current_theme), unsafe_allow_html=True)
+SHARED_STYLES = shared_styles(_current_theme)
+
 current_event_name, current_event_scores = load_current_tournament()
 
 # Auto-refresh during tournament hours
@@ -430,64 +230,22 @@ if is_tournament_hours():
 else:
     refresh_text = f"Last updated: {refresh_time} &middot; Refresh paused (outside 8am&ndash;8pm ET)"
 
-st.html(f"""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
-    body {{ margin: 0; }}
-    .masters-header {{
-        text-align: center; padding: 1.5rem 1rem 0.5rem;
-    }}
-    .masters-header h1 {{
-        font-family: 'EB Garamond', Georgia, serif;
-        color: #FFD700; font-size: 2.8rem; font-weight: 700;
-        margin: 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        letter-spacing: 2px;
-    }}
-    .subtitle {{
-        font-family: 'EB Garamond', Georgia, serif;
-        color: #f5f5f0; font-size: 1.1rem;
-        margin-top: 0.3rem; font-style: italic;
-    }}
-    .azalea-divider {{
-        color: #CE1141; font-size: 1.2rem;
-        letter-spacing: 8px; margin-top: 0.5rem;
-    }}
-    .status-bar {{
-        text-align: center; font-size: 0.85rem;
-        color: #c0c0b0; padding: 0.5rem;
-    }}
-    @media (max-width: 768px) {{
-        .masters-header h1 {{ font-size: 1.8rem; }}
-    }}
-</style>
-<div class="masters-header">
-    <h1>{db_tourney['name'].upper() + ' POOL' if db_tourney else 'THE MASTERS POOL'}</h1>
-    <div class="subtitle">{'PGA Tour' if db_tourney else 'Augusta National Golf Club'} &middot; 2026</div>
-    <div class="azalea-divider">&#10047; &#10047; &#10047; &#10047; &#10047;</div>
+_title = db_tourney["name"].upper() + " POOL" if db_tourney else "PGA POOL"
+_subtitle = "PGA Tour &middot; 2026"
+st.html(header_html(_current_theme, _title, _subtitle) + """
+<div style="text-align: center; font-size: 0.85rem; color: #c0c0b0; padding: 0.5rem;">
+    %s &middot; Picks: %s &middot; Scores: %s
 </div>
-<div class="status-bar">
-    {refresh_text} &middot; Picks: {data_source_picks} &middot; Scores: {data_source_scores}
-</div>
-""")
+""" % (refresh_text, data_source_picks, data_source_scores))
 
 # Winner banner if tournament is over
 if winning_score is not None:
-    st.html(f"""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap');
-        .winner-banner {{
-            background: linear-gradient(135deg, #006747 0%, #004d35 100%);
-            border: 2px solid #FFD700; border-radius: 8px;
-            padding: 1rem; text-align: center; margin: 0.5rem;
-        }}
-        .winner-banner span {{
-            color: #FFD700; font-family: 'EB Garamond', Georgia, serif; font-size: 1.2rem;
-        }}
-    </style>
+    _tourney_name = db_tourney["name"] if db_tourney else "the Masters"
+    st.html(SHARED_STYLES + """
     <div class="winner-banner">
-        <span>&#127942; {winner_name} wins the Masters at {format_score(winning_score)} &#127942;</span>
+        <span>&#127942; %s wins %s at %s &#127942;</span>
     </div>
-    """)
+    """ % (winner_name, _tourney_name, format_score(winning_score)))
 
 # ---------- Tabs ----------
 tab_standings, tab_breakdowns, tab_tournament, tab_rules = st.tabs([
@@ -730,6 +488,23 @@ with tab_tournament:
 
 # ==================== TAB 4: SCORING RULES ====================
 with tab_rules:
+    if pool_tiers:
+        tier_rows_html = ""
+        for t in pool_tiers:
+            rank_max = t["rank_max"] if t["rank_max"] else "+"
+            tier_rows_html += (
+                "<tr><td>%s</td><td>%s &ndash; %s</td><td>%s</td></tr>"
+                % (t["label"], t["rank_min"], rank_max, t["picks_required"])
+            )
+    else:
+        tier_rows_html = (
+            '<tr><td>Tier 1</td><td>1 &ndash; 10</td><td>2</td></tr>'
+            '<tr><td>Tier 2</td><td>11 &ndash; 20</td><td>2</td></tr>'
+            '<tr><td>Tier 3</td><td>21 &ndash; 40</td><td>2</td></tr>'
+            '<tr><td>Tier 4</td><td>41 &ndash; 70</td><td>2</td></tr>'
+            '<tr><td>Tier 5</td><td>71+</td><td>2</td></tr>'
+        )
+
     st.html(f"""
     {SHARED_STYLES}
     <div class="rules-card">
@@ -739,18 +514,7 @@ with tab_rules:
 
         <table>
             <tr><th>Tier</th><th>Players Ranked</th><th>Picks</th></tr>
-            {''.join(
-                f'<tr><td>{t["label"]}</td>'
-                f'<td>{t["rank_min"]} &ndash; {t["rank_max"] if t["rank_max"] else "+"}</td>'
-                f'<td>{t["picks_required"]}</td></tr>'
-                for t in pool_tiers
-            ) if pool_tiers else """
-            <tr><td>Tier 1</td><td>1 &ndash; 10</td><td>2</td></tr>
-            <tr><td>Tier 2</td><td>11 &ndash; 20</td><td>2</td></tr>
-            <tr><td>Tier 3</td><td>21 &ndash; 40</td><td>2</td></tr>
-            <tr><td>Tier 4</td><td>41 &ndash; 70</td><td>2</td></tr>
-            <tr><td>Tier 5</td><td>71+</td><td>2</td></tr>
-            """}
+            {tier_rows_html}
         </table>
 
         <h3>Missed Cut Penalty</h3>
