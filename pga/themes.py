@@ -103,6 +103,15 @@ def theme_css(theme):
     /* Labels */
     .stSelectbox label, .stTextInput label, .stNumberInput label,
     .stTextArea label { color: %(text_dim)s !important; }
+
+    /* Sidebar — compact and clean */
+    [data-testid="stSidebar"] { max-width: 180px; }
+    [data-testid="stSidebar"] [data-testid="stSidebarNav"] {
+        padding-top: 1rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarNav"] a {
+        font-size: 0.85rem;
+    }
 </style>
 """ % {
         "bg": BG, "bg_card": BG_CARD, "border": BORDER,

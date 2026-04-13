@@ -37,6 +37,7 @@ st.set_page_config(
     page_title="PGA Pool",
     page_icon="⛳",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 # ---------- Theme ----------
