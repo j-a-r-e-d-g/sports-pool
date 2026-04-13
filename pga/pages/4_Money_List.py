@@ -20,7 +20,12 @@ init_db()
 # ---------- Theme ----------
 _theme = DEFAULT_THEME
 st.markdown(theme_css(_theme), unsafe_allow_html=True)
-SHARED_STYLES = shared_styles(_theme)
+SHARED_STYLES = shared_styles(_theme) + """
+<style>
+    .money-pos { color: #2ECC71; font-weight: 700; }
+    .money-neg { color: #E74C3C; font-weight: 600; }
+</style>
+"""
 
 # ---------- Payout structure ----------
 # Maps finish position to payout amount
@@ -90,7 +95,7 @@ for i, (name, data) in enumerate(standings):
     # Format earnings
     earnings_str = "$%d" % data["earnings"] if data["earnings"] > 0 else "&mdash;"
     net_str = "+$%d" % net if net > 0 else ("-$%d" % abs(net) if net < 0 else "E")
-    net_cls = "score-under" if net > 0 else ("score-over" if net < 0 else "score-even")
+    net_cls = "money-pos" if net > 0 else ("money-neg" if net < 0 else "score-even")
 
     wins_str = str(data["wins"]) if data["wins"] > 0 else "&mdash;"
     top3_str = str(data["top3"]) if data["top3"] > 0 else "&mdash;"
