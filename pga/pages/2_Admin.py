@@ -169,9 +169,7 @@ preset_labels = [PRESETS[k]["name"] for k in preset_keys]
 current_theme = tournament.get("theme") or {}
 current_preset_idx = 0
 for i, key in enumerate(preset_keys):
-    preset = PRESETS[key]
-    if (current_theme.get("bg") == preset["bg"]
-            and current_theme.get("primary") == preset["primary"]):
+    if current_theme.get("accent") == PRESETS[key]["accent"]:
         current_preset_idx = i
         break
 
@@ -183,27 +181,36 @@ selected_preset = st.selectbox(
 )
 
 chosen = PRESETS[preset_keys[selected_preset]]
-# Preview
+
+# Preview swatch
 st.markdown(
     '<div style="display: flex; gap: 8px; align-items: center;">'
     '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
-    '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
-    '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
-    '<div style="width:40px; height:40px; border-radius:6px; background:%s; border:2px solid #555;"></div>'
-    '<span style="color: #f5f5f0; margin-left: 8px;">BG &middot; Dark &middot; Primary &middot; Accent</span>'
-    '</div>' % (chosen["bg"], chosen["bg_dark"], chosen["primary"], chosen["accent"]),
+    '<span style="color: #E6E6E6; margin-left: 8px;">Accent color</span>'
+    '</div>' % chosen["accent"],
     unsafe_allow_html=True,
 )
 
+# Logo URL
+current_logo = current_theme.get("logo_url", chosen.get("logo_url", ""))
+logo_input = st.text_input("Logo URL (optional)", value=current_logo)
+
+if logo_input:
+    st.markdown(
+        '<div style="padding: 0.5rem; background: #1A1D23; border-radius: 8px; '
+        'border: 1px solid #2A2E35; text-align: center;">'
+        '<img src="%s" style="max-height: 60px; max-width: 200px; object-fit: contain;">'
+        '</div>' % logo_input,
+        unsafe_allow_html=True,
+    )
+
 if st.button("Apply Theme"):
     theme_data = {
-        "bg": chosen["bg"],
-        "bg_dark": chosen["bg_dark"],
-        "primary": chosen["primary"],
         "accent": chosen["accent"],
+        "logo_url": logo_input,
     }
     update_tournament_theme(tid, theme_data)
-    st.success(f"Applied {chosen['name']} theme!")
+    st.success("Theme applied!")
     st.rerun()
 
 st.divider()
