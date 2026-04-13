@@ -24,6 +24,19 @@ SHARED_STYLES = shared_styles(_theme) + """
 <style>
     .money-pos { color: #2ECC71; font-weight: 700; }
     .money-neg { color: #E74C3C; font-weight: 600; }
+
+    /* Mobile: hide less important columns, tighten spacing */
+    .hide-mobile { }
+    @media (max-width: 600px) {
+        .hide-mobile { display: none; }
+        .leaderboard-table { font-size: 0.78rem; }
+        .leaderboard-table th, .leaderboard-table td { padding: 0.35rem 0.4rem; }
+        .detail-table { font-size: 0.75rem; }
+        .detail-table th, .detail-table td { padding: 0.3rem 0.4rem; }
+        .rank-badge { width: 22px; height: 22px; line-height: 22px; font-size: 0.7rem; }
+        .scoreboard { padding: 0.8rem; }
+        .scoreboard h3 { font-size: 0.95rem; }
+    }
 </style>
 """
 
@@ -104,9 +117,9 @@ for i, (name, data) in enumerate(standings):
     <tr%s>
         <td><span class="rank-badge %s">%d</span></td>
         <td>%s</td>
-        <td>%d</td>
-        <td>%s</td>
-        <td>%s</td>
+        <td class="hide-mobile">%d</td>
+        <td class="hide-mobile">%s</td>
+        <td class="hide-mobile">%s</td>
         <td>%s</td>
         <td><span class="%s">%s</span></td>
     </tr>""" % (
@@ -127,9 +140,9 @@ st.html("""%s
             <tr>
                 <th>Pos</th>
                 <th>Name</th>
-                <th>Events</th>
-                <th>Wins</th>
-                <th>Top 3</th>
+                <th class="hide-mobile">Events</th>
+                <th class="hide-mobile">Wins</th>
+                <th class="hide-mobile">Top 3</th>
                 <th>Earnings</th>
                 <th>Net</th>
             </tr>

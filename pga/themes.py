@@ -112,6 +112,22 @@ def theme_css(theme):
     [data-testid="stSidebar"] [data-testid="stSidebarNav"] a {
         font-size: 0.85rem;
     }
+
+    /* Sidebar collapse button — more visible */
+    [data-testid="stSidebar"] button[kind="header"] {
+        color: #fff !important;
+    }
+    button[data-testid="stBaseButton-headerNoPadding"] {
+        background-color: %(accent)s !important;
+        color: #fff !important;
+        border-radius: 0 8px 8px 0;
+        padding: 0.4rem 0.5rem !important;
+        opacity: 0.9;
+    }
+    button[data-testid="stBaseButton-headerNoPadding"]:hover {
+        opacity: 1;
+        background-color: %(accent)s !important;
+    }
 </style>
 """ % {
         "bg": BG, "bg_card": BG_CARD, "border": BORDER,
