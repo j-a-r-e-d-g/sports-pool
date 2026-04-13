@@ -48,12 +48,12 @@ if "admin_auth" not in st.session_state:
 if not st.session_state.admin_auth:
     st.markdown("""
     <div style="text-align: center; padding: 2rem 0;">
-        <h1 style="font-family: 'EB Garamond', Georgia, serif; color: %s;
+        <h1 style="font-family: 'Inter', sans-serif; color: %s;
                    font-size: 2rem; letter-spacing: 2px;">
             POOL ADMIN
         </h1>
     </div>
-    """ % DEFAULT_THEME["primary"], unsafe_allow_html=True)
+    """ % DEFAULT_THEME["accent"], unsafe_allow_html=True)
 
     password = st.text_input("Enter admin password", type="password")
     if st.button("Login"):
@@ -67,12 +67,12 @@ if not st.session_state.admin_auth:
 # ---------- Admin Interface ----------
 st.markdown("""
 <div style="text-align: center; padding: 1rem 0;">
-    <h1 style="font-family: 'EB Garamond', Georgia, serif; color: %s;
+    <h1 style="font-family: 'Inter', sans-serif; color: %s;
                font-size: 2rem; letter-spacing: 2px;">
         POOL ADMIN
     </h1>
 </div>
-""" % DEFAULT_THEME["primary"], unsafe_allow_html=True)
+""" % DEFAULT_THEME["accent"], unsafe_allow_html=True)
 
 # ---------- Sidebar: Tournament Selector ----------
 tournaments = list_tournaments()
