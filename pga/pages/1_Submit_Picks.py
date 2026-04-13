@@ -61,15 +61,94 @@ if not tiers:
     st.stop()
 
 st.markdown("""
-<div style="text-align: center; color: #f5f5f0; font-family: 'EB Garamond', Georgia, serif;
+<div style="text-align: center; color: #E6E6E6; font-family: 'Inter', sans-serif;
             font-size: 1.1rem; margin-bottom: 1rem;">
     %s &middot; %s
-    <br><span style="font-size: 0.9rem; color: #c0c0b0;">
+    <br><span style="font-size: 0.9rem; color: #8B8D93;">
         %s entries so far
     </span>
 </div>
 """ % (tournament["name"], tournament["start_date"].strftime("%B %d, %Y"), get_entry_count(tid)),
 unsafe_allow_html=True)
+
+# ---------- Rules Summary ----------
+from themes import shared_styles
+rules = tournament.get("rules") or {}
+if rules:
+    STYLES = shared_styles(_theme)
+    buy_in = rules.get("buy_in", 10)
+    p1 = rules.get("payout_1st", 100)
+    p2 = rules.get("payout_2nd", 50)
+    p3 = rules.get("payout_3rd", 20)
+    mc_r3 = rules.get("mc_r3", 5)
+    mc_r4 = rules.get("mc_r4", 6)
+    mc_total = mc_r3 + mc_r4
+    wd_pen = rules.get("wd_penalty", 15)
+    bonuses = rules.get("bonuses", {})
+    top10 = rules.get("top10_bonus", 10)
+    notes = rules.get("notes", "")
+
+    # Build tier rows
+    tier_rows = ""
+    for t in tiers:
+        rmax = t["rank_max"] if t["rank_max"] else "+"
+        tier_rows += "<tr><td>%s</td><td>%s &ndash; %s</td><td>%s</td></tr>" % (
+            t["label"], t["rank_min"], rmax, t["picks_required"])
+
+    # Build bonus rows
+    bonus_rows = ""
+    for pos, label in [("1st", "1st"), ("2nd", "2nd"), ("3rd", "3rd"), ("4th", "4th"), ("5th", "5th")]:
+        val = bonuses.get(pos, 0)
+        if val > 0:
+            bonus_rows += "<tr><td>%s</td><td>-%d</td></tr>" % (label, val)
+    if top10 > 0:
+        bonus_rows += "<tr><td>6th &ndash; 10th</td><td>-%d</td></tr>" % top10
+
+    notes_html = ""
+    if notes:
+        notes_html = "<h4>Special Rules</h4><p>%s</p>" % notes
+
+    st.html("""%s
+    <div class="detail-card" style="margin-bottom: 1rem;">
+        <h4>Rules &amp; Payouts</h4>
+        <p style="color: #8B8D93; font-size: 0.85rem; margin-bottom: 0.8rem;">
+            <strong style="color: #E6E6E6;">$%d buy-in</strong> &middot;
+            1st: $%d &middot; 2nd: $%d &middot; 3rd: $%d
+        </p>
+
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <h4 style="font-size: 0.85rem;">Tiers</h4>
+                <table class="detail-table">
+                    <tr><th>Tier</th><th>Ranks</th><th>Picks</th></tr>
+                    %s
+                </table>
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+                <h4 style="font-size: 0.85rem;">Placement Bonuses</h4>
+                <table class="detail-table">
+                    <tr><th>Finish</th><th>Bonus</th></tr>
+                    %s
+                </table>
+            </div>
+            <div style="flex: 1; min-width: 150px;">
+                <h4 style="font-size: 0.85rem;">Penalties</h4>
+                <table class="detail-table">
+                    <tr><th>Type</th><th>Strokes</th></tr>
+                    <tr><td>Missed Cut (R3)</td><td>+%d</td></tr>
+                    <tr><td>Missed Cut (R4)</td><td>+%d</td></tr>
+                    <tr><td><strong>MC Total</strong></td><td><strong>+%d</strong></td></tr>
+                    <tr><td>Withdrawal</td><td>+%d</td></tr>
+                </table>
+            </div>
+        </div>
+        %s
+        <p style="color: #8B8D93; font-size: 0.8rem; margin-top: 0.8rem;">
+            Lowest cumulative score wins. Tiebreaker: closest prediction to the winning score.
+        </p>
+    </div>
+    """ % (STYLES, buy_in, p1, p2, p3, tier_rows, bonus_rows,
+           mc_r3, mc_r4, mc_total, wd_pen, notes_html))
 
 # ---------- Pick Form ----------
 with st.form("pick_form"):

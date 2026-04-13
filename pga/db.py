@@ -67,6 +67,7 @@ def init_db():
                     start_date TIMESTAMP NOT NULL,
                     status TEXT NOT NULL DEFAULT 'setup',
                     theme JSONB,
+                    rules JSONB,
                     created_at TIMESTAMP DEFAULT NOW()
                 );
 
@@ -115,9 +116,13 @@ def init_db():
                     created_at TIMESTAMP DEFAULT NOW()
                 );
 
-                -- Add theme column if it doesn't exist (migration for existing DBs)
+                -- Add columns if they don't exist (migration for existing DBs)
                 DO $$ BEGIN
                     ALTER TABLE tournaments ADD COLUMN theme JSONB;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
+                DO $$ BEGIN
+                    ALTER TABLE tournaments ADD COLUMN rules JSONB;
                 EXCEPTION WHEN duplicate_column THEN NULL;
                 END $$;
             """)
@@ -171,6 +176,17 @@ def update_tournament_theme(tournament_id, theme_dict):
             cur.execute(
                 "UPDATE tournaments SET theme = %s WHERE id = %s",
                 (json.dumps(theme_dict), tournament_id),
+            )
+
+
+def update_tournament_rules(tournament_id, rules_dict):
+    """Update a tournament's rules config (JSONB)."""
+    import json
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tournaments SET rules = %s WHERE id = %s",
+                (json.dumps(rules_dict), tournament_id),
             )
 
 

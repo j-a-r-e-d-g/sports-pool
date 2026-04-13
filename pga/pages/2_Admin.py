@@ -14,7 +14,7 @@ import streamlit as st
 from datetime import datetime, date, time
 from db import (
     init_db, create_tournament, list_tournaments, get_tournament,
-    update_tournament_status, update_tournament_theme,
+    update_tournament_status, update_tournament_theme, update_tournament_rules,
     create_tier, get_tiers, delete_tiers,
     add_players, get_players_by_tier, get_entry_count, get_entries,
     save_results,
@@ -211,6 +211,87 @@ if st.button("Apply Theme"):
     }
     update_tournament_theme(tid, theme_data)
     st.success("Theme applied!")
+    st.rerun()
+
+st.divider()
+
+# ---------- Rules Config ----------
+st.subheader("Rules & Payouts")
+
+current_rules = tournament.get("rules") or {}
+
+rules_col1, rules_col2 = st.columns(2)
+
+with rules_col1:
+    buy_in = st.number_input(
+        "Buy-in ($)", value=current_rules.get("buy_in", 10),
+        min_value=0, step=5, key="rules_buyin",
+    )
+    payout_1st = st.number_input(
+        "1st place payout ($)", value=current_rules.get("payout_1st", 100),
+        min_value=0, step=10, key="rules_p1",
+    )
+    payout_2nd = st.number_input(
+        "2nd place payout ($)", value=current_rules.get("payout_2nd", 50),
+        min_value=0, step=10, key="rules_p2",
+    )
+    payout_3rd = st.number_input(
+        "3rd place payout ($)", value=current_rules.get("payout_3rd", 20),
+        min_value=0, step=10, key="rules_p3",
+    )
+
+with rules_col2:
+    mc_r3 = st.number_input(
+        "Missed cut penalty — R3", value=current_rules.get("mc_r3", 5),
+        min_value=0, step=1, key="rules_mc3",
+    )
+    mc_r4 = st.number_input(
+        "Missed cut penalty — R4", value=current_rules.get("mc_r4", 6),
+        min_value=0, step=1, key="rules_mc4",
+    )
+    wd_penalty = st.number_input(
+        "Withdrawal penalty", value=current_rules.get("wd_penalty", 15),
+        min_value=0, step=1, key="rules_wd",
+    )
+
+st.write("**Placement bonuses** (strokes deducted)")
+bonus_cols = st.columns(5)
+bonus_defaults = current_rules.get("bonuses", {})
+bonuses = {}
+for i, pos in enumerate(["1st", "2nd", "3rd", "4th", "5th"]):
+    with bonus_cols[i]:
+        default = bonus_defaults.get(pos, [15, 14, 13, 12, 11][i])
+        bonuses[pos] = st.number_input(
+            pos, value=default, min_value=0, step=1, key="bonus_%s" % pos,
+        )
+
+top10_bonus = st.number_input(
+    "Top 10 bonus (strokes)", value=current_rules.get("top10_bonus", 10),
+    min_value=0, step=1, key="rules_top10",
+)
+
+notes = st.text_area(
+    "Extra rules / twists (shown to participants)",
+    value=current_rules.get("notes", ""),
+    placeholder="e.g., Double points for aces, bonus for picking the winner, etc.",
+    key="rules_notes",
+)
+
+if st.button("Save Rules"):
+    rules_data = {
+        "buy_in": buy_in,
+        "payout_1st": payout_1st,
+        "payout_2nd": payout_2nd,
+        "payout_3rd": payout_3rd,
+        "mc_r3": mc_r3,
+        "mc_r4": mc_r4,
+        "wd_penalty": wd_penalty,
+        "bonuses": bonuses,
+        "top10_bonus": top10_bonus,
+        "notes": notes,
+    }
+    update_tournament_rules(tid, rules_data)
+    st.success("Rules saved!")
     st.rerun()
 
 st.divider()

@@ -489,69 +489,82 @@ with tab_tournament:
 
 # ==================== TAB 4: SCORING RULES ====================
 with tab_rules:
+    # Build tier rows
+    tier_rows_html = ""
     if pool_tiers:
-        tier_rows_html = ""
         for t in pool_tiers:
             rank_max = t["rank_max"] if t["rank_max"] else "+"
             tier_rows_html += (
                 "<tr><td>%s</td><td>%s &ndash; %s</td><td>%s</td></tr>"
                 % (t["label"], t["rank_min"], rank_max, t["picks_required"])
             )
-    else:
-        tier_rows_html = (
-            '<tr><td>Tier 1</td><td>1 &ndash; 10</td><td>2</td></tr>'
-            '<tr><td>Tier 2</td><td>11 &ndash; 20</td><td>2</td></tr>'
-            '<tr><td>Tier 3</td><td>21 &ndash; 40</td><td>2</td></tr>'
-            '<tr><td>Tier 4</td><td>41 &ndash; 70</td><td>2</td></tr>'
-            '<tr><td>Tier 5</td><td>71+</td><td>2</td></tr>'
-        )
 
-    st.html(f"""
-    {SHARED_STYLES}
+    # Pull rules from tournament config
+    rules = db_tourney.get("rules", {}) if db_tourney else {}
+    r_buy_in = rules.get("buy_in", 10)
+    r_p1 = rules.get("payout_1st", 100)
+    r_p2 = rules.get("payout_2nd", 50)
+    r_p3 = rules.get("payout_3rd", 20)
+    r_mc_r3 = rules.get("mc_r3", 5)
+    r_mc_r4 = rules.get("mc_r4", 6)
+    r_mc_total = r_mc_r3 + r_mc_r4
+    r_wd = rules.get("wd_penalty", 15)
+    r_bonuses = rules.get("bonuses", {"1st": 15, "2nd": 14, "3rd": 13, "4th": 12, "5th": 11})
+    r_top10 = rules.get("top10_bonus", 10)
+    r_notes = rules.get("notes", "")
+
+    # Build bonus rows
+    bonus_rows_html = ""
+    for pos in ["1st", "2nd", "3rd", "4th", "5th"]:
+        val = r_bonuses.get(pos, 0)
+        if val > 0:
+            bonus_rows_html += "<tr><td>%s</td><td><strong>-%d</strong></td></tr>" % (pos, val)
+    if r_top10 > 0:
+        bonus_rows_html += "<tr><td>6th &ndash; 10th</td><td><strong>-%d</strong></td></tr>" % r_top10
+
+    notes_html = ""
+    if r_notes:
+        notes_html = "<h3>Special Rules</h3><p>%s</p>" % r_notes
+
+    st.html("""
+    %s
     <div class="rules-card">
-        <h3>Pool Format</h3>
-        <p>Pick players from each tier (see below). Your score is the
-        cumulative to-par total across all your picks. <strong>Lowest score wins.</strong></p>
+        <h3>Payouts</h3>
+        <p><strong>$%d buy-in</strong> &middot; 1st: $%d &middot; 2nd: $%d &middot; 3rd: $%d</p>
 
+        <h3>Pool Format</h3>
+        <p>Pick players from each tier. Your score is the
+        cumulative to-par total across all your picks. <strong>Lowest score wins.</strong></p>
         <table>
             <tr><th>Tier</th><th>Players Ranked</th><th>Picks</th></tr>
-            {tier_rows_html}
+            %s
         </table>
 
         <h3>Missed Cut Penalty</h3>
         <p>If one of your players misses the cut, their score gets a penalty added:</p>
         <table>
             <tr><th>Round</th><th>Penalty</th></tr>
-            <tr><td>Round 3</td><td>+5</td></tr>
-            <tr><td>Round 4</td><td>+6</td></tr>
-            <tr><td><strong>Total</strong></td><td><strong>+11</strong></td></tr>
+            <tr><td>Round 3</td><td>+%d</td></tr>
+            <tr><td>Round 4</td><td>+%d</td></tr>
+            <tr><td><strong>Total</strong></td><td><strong>+%d</strong></td></tr>
         </table>
 
         <h3>Withdrawal Penalty</h3>
-        <p>If a player withdraws, they receive <strong>+6 for each round not played or finished</strong>.</p>
-        <table>
-            <tr><th>Withdraws During</th><th>Rounds Missed</th><th>Penalty</th></tr>
-            <tr><td>Round 1</td><td>4</td><td>+24</td></tr>
-            <tr><td>Round 2</td><td>3</td><td>+18</td></tr>
-            <tr><td>Round 3</td><td>2</td><td>+12</td></tr>
-            <tr><td>Round 4</td><td>1</td><td>+6</td></tr>
-        </table>
+        <p>If a player withdraws, they receive <strong>+%d strokes penalty</strong>.</p>
 
         <h3>Placement Bonuses</h3>
-        <p>Players finishing in the <strong>top 10</strong> earn a bonus (subtracted from your total).
-        The top 5 get an additional placement bonus on top of the base -10:</p>
+        <p>Players finishing in the <strong>top 10</strong> earn a bonus (subtracted from your total):</p>
         <table>
-            <tr><th>Finish</th><th>Top 10 Bonus</th><th>Placement Bonus</th><th>Total Bonus</th></tr>
-            <tr><td>1st</td><td>-10</td><td>-5</td><td><strong>-15</strong></td></tr>
-            <tr><td>2nd</td><td>-10</td><td>-4</td><td><strong>-14</strong></td></tr>
-            <tr><td>3rd</td><td>-10</td><td>-3</td><td><strong>-13</strong></td></tr>
-            <tr><td>4th</td><td>-10</td><td>-2</td><td><strong>-12</strong></td></tr>
-            <tr><td>5th</td><td>-10</td><td>-1</td><td><strong>-11</strong></td></tr>
-            <tr><td>6th &ndash; 10th</td><td>-10</td><td>&mdash;</td><td><strong>-10</strong></td></tr>
+            <tr><th>Finish</th><th>Bonus</th></tr>
+            %s
         </table>
 
         <h3>Tiebreaker</h3>
         <p>If two or more participants are tied on total score, the tiebreaker is
         <strong>closest prediction to the winning score</strong> of the tournament.</p>
+
+        %s
     </div>
-    """)
+    """ % (SHARED_STYLES, r_buy_in, r_p1, r_p2, r_p3,
+           tier_rows_html, r_mc_r3, r_mc_r4, r_mc_total,
+           r_wd, bonus_rows_html, notes_html))
