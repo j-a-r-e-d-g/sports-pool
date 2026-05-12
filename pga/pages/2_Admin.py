@@ -17,7 +17,7 @@ from db import (
     update_tournament_status, update_tournament_theme, update_tournament_rules,
     create_tier, get_tiers, delete_tiers,
     add_players, get_players_by_tier, get_entry_count, get_entries,
-    save_results,
+    delete_entry, save_results,
 )
 from themes import get_theme, theme_css, PRESETS
 
@@ -392,3 +392,6 @@ if entry_count > 0:
             for i, pick in enumerate(entry["picks"]):
                 tier_num = (i // existing_tiers[0]["picks_required"]) + 1 if existing_tiers else "?"
                 st.write(f"Tier {tier_num}: {pick}")
+            if st.button(f"Delete entry", key=f"del_{entry['name']}", type="secondary"):
+                delete_entry(tid, entry["name"])
+                st.rerun()

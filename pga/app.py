@@ -239,14 +239,13 @@ st.html(header_html(_current_theme, _title, _subtitle) + """
 </div>
 """ % (refresh_text, data_source_picks, data_source_scores))
 
-# Winner banner if tournament is over
-if winning_score is not None:
-    _tourney_name = db_tourney["name"] if db_tourney else "the Masters"
+# Winner banner — only show when tournament is live or final
+if winning_score is not None and db_tourney and db_tourney.get("status") in ("live", "final"):
     st.html(SHARED_STYLES + """
     <div class="winner-banner">
         <span>&#127942; %s wins %s at %s &#127942;</span>
     </div>
-    """ % (winner_name, _tourney_name, format_score(winning_score)))
+    """ % (winner_name, db_tourney["name"], format_score(winning_score)))
 
 # ---------- Tabs ----------
 tab_standings, tab_breakdowns, tab_tournament, tab_rules = st.tabs([

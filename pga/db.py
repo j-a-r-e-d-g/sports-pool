@@ -356,6 +356,16 @@ def has_entered(tournament_id, participant_name):
             return cur.fetchone()[0] > 0
 
 
+def delete_entry(tournament_id, participant_name):
+    """Delete an entry and its picks (via CASCADE) for a tournament."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM entries WHERE tournament_id = %s AND participant_name = %s",
+                (tournament_id, participant_name),
+            )
+
+
 # ---------- Results (Archives) ----------
 
 def save_results(tournament_id, leaderboard):
