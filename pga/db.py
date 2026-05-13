@@ -366,6 +366,17 @@ def delete_entry(tournament_id, participant_name):
             )
 
 
+def update_entry_name(tournament_id, old_name, new_name):
+    """Rename a participant's entry (for consistent money list tracking)."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE entries SET participant_name = %s "
+                "WHERE tournament_id = %s AND participant_name = %s",
+                (new_name, tournament_id, old_name),
+            )
+
+
 # ---------- Results (Archives) ----------
 
 def save_results(tournament_id, leaderboard):

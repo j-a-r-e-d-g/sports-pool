@@ -17,7 +17,7 @@ from db import (
     update_tournament_status, update_tournament_theme, update_tournament_rules,
     create_tier, get_tiers, delete_tiers,
     add_players, get_players_by_tier, get_entry_count, get_entries,
-    delete_entry, save_results,
+    delete_entry, update_entry_name, save_results,
 )
 from themes import get_theme, theme_css, PRESETS
 
@@ -330,7 +330,7 @@ with st.expander("Configure Tiers" if not existing_tiers else "Add More Tiers"):
         with cols[0]:
             label = st.text_input("Label", value=f"Tier {i + 1}", key=f"tier_label_{i}")
         with cols[1]:
-            rank_min = st.number_input("Rank min", value=1 if i == 0 else 0, min_value=1, key=f"tier_min_{i}")
+            rank_min = st.number_input("Rank min", value=1, min_value=1, key=f"tier_min_{i}")
         with cols[2]:
             rank_max = st.number_input("Rank max (0 = no limit)", value=0, min_value=0, key=f"tier_max_{i}")
         with cols[3]:
@@ -392,6 +392,16 @@ if entry_count > 0:
             for i, pick in enumerate(entry["picks"]):
                 tier_num = (i // existing_tiers[0]["picks_required"]) + 1 if existing_tiers else "?"
                 st.write(f"Tier {tier_num}: {pick}")
-            if st.button(f"Delete entry", key=f"del_{entry['name']}", type="secondary"):
-                delete_entry(tid, entry["name"])
-                st.rerun()
+            edit_col, del_col = st.columns([3, 1])
+            with edit_col:
+                new_name = st.text_input(
+                    "Rename", value=entry["name"], key=f"rename_{entry['name']}",
+                    label_visibility="collapsed",
+                )
+                if new_name != entry["name"] and st.button("Save name", key=f"save_{entry['name']}"):
+                    update_entry_name(tid, entry["name"], new_name.strip())
+                    st.rerun()
+            with del_col:
+                if st.button("Delete", key=f"del_{entry['name']}", type="secondary"):
+                    delete_entry(tid, entry["name"])
+                    st.rerun()
