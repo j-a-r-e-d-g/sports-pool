@@ -71,13 +71,13 @@ PLACEMENT_BONUSES = {
     10: -10,
 }
 
-# Missed cut penalty: +5 for round 3, +6 for round 4 = +11 total
+# Default penalties (used as fallback if no tournament rules passed)
 MISSED_CUT_PENALTY_R3 = 5
-MISSED_CUT_PENALTY_R4 = 6
-MISSED_CUT_PENALTY_TOTAL = MISSED_CUT_PENALTY_R3 + MISSED_CUT_PENALTY_R4  # +11
+MISSED_CUT_PENALTY_R4 = 5
+MISSED_CUT_PENALTY_TOTAL = MISSED_CUT_PENALTY_R3 + MISSED_CUT_PENALTY_R4  # +10
 
-# Withdrawal penalty: +6 for each round not played or finished
-WD_PENALTY_PER_ROUND = 6
+# Withdrawal penalty
+WD_PENALTY = 15
 TOTAL_ROUNDS = 4
 
 
@@ -89,35 +89,31 @@ def get_placement_bonus(finish_position):
     return PLACEMENT_BONUSES.get(finish_position, 0)
 
 
-def calculate_missed_cut_penalty(made_cut):
+def calculate_missed_cut_penalty(made_cut, rules=None):
     """
-    If a player missed the cut, they get +5 for round 3 and +6 for round 4.
-    Total penalty = +11. Returns 0 if they made the cut.
+    If a player missed the cut, apply the configured penalty.
+    Uses tournament rules if provided, otherwise defaults.
     """
     if made_cut:
         return 0
+    if rules:
+        return rules.get("mc_r3", MISSED_CUT_PENALTY_R3) + rules.get("mc_r4", MISSED_CUT_PENALTY_R4)
     return MISSED_CUT_PENALTY_TOTAL
 
 
-def calculate_wd_penalty(wd_round):
+def calculate_wd_penalty(wd_round, rules=None):
     """
-    If a player withdraws, they get +6 for each round not played or finished.
-
-    wd_round = the round they withdrew during (1-4).
-    That round and all remaining rounds are penalized.
-    e.g. WD in round 2 → didn't finish R2, missed R3 & R4 → +6 * 3 = +18
-
+    If a player withdraws, apply the configured WD penalty.
     Returns 0 if wd_round is None (player didn't withdraw).
     """
     if wd_round is None:
         return 0
-    # Clamp to valid range just in case
-    wd_round = max(1, min(TOTAL_ROUNDS, wd_round))
-    rounds_missed = TOTAL_ROUNDS - wd_round + 1
-    return WD_PENALTY_PER_ROUND * rounds_missed
+    if rules:
+        return rules.get("wd_penalty", WD_PENALTY)
+    return WD_PENALTY
 
 
-def calculate_player_score(player_data):
+def calculate_player_score(player_data, rules=None):
     """
     Calculate the total pool score for a single picked player.
 
@@ -127,26 +123,33 @@ def calculate_player_score(player_data):
         - "wd_round": int (1-4) if player withdrew, None otherwise
         - "finish_position": int or None if tournament is still in progress
 
-    Returns a dict with the score breakdown:
-        - "score": score relative to par
-        - "missed_cut_penalty": +11 if missed, 0 otherwise
-        - "wd_penalty": +6 per round not played/finished, 0 otherwise
-        - "placement_bonus": negative number for top 10, 0 otherwise
-        - "total": score + penalties + bonus
+    rules: optional tournament rules dict from DB (mc_r3, mc_r4, wd_penalty, bonuses, top10_bonus)
+
+    Returns a dict with the score breakdown.
     """
     score = player_data.get("score", 0)
 
     # WD and missed cut are mutually exclusive — check WD first
     wd_round = player_data.get("wd_round")
-    wd_penalty = calculate_wd_penalty(wd_round)
+    wd_penalty = calculate_wd_penalty(wd_round, rules)
 
     # Missed cut penalty only applies if they didn't withdraw
     made_cut = player_data.get("made_cut", True)
-    mc_penalty = calculate_missed_cut_penalty(made_cut) if wd_round is None else 0
+    mc_penalty = calculate_missed_cut_penalty(made_cut, rules) if wd_round is None else 0
 
-    # Placement bonus — applies live based on projected finish position
+    # Placement bonus — uses tournament rules if available
     finish_position = player_data.get("finish_position")
-    bonus = get_placement_bonus(finish_position) if finish_position else 0
+    bonus = 0
+    if finish_position:
+        if rules and "bonuses" in rules:
+            # Check named positions first (1st, 2nd, etc.)
+            pos_key = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th"}.get(finish_position)
+            if pos_key and pos_key in rules["bonuses"]:
+                bonus = -rules["bonuses"][pos_key]
+            elif finish_position <= 10:
+                bonus = -rules.get("top10_bonus", 10)
+        else:
+            bonus = get_placement_bonus(finish_position)
 
     total = score + mc_penalty + wd_penalty + bonus
 
@@ -159,19 +162,18 @@ def calculate_player_score(player_data):
     }
 
 
-def calculate_participant_score(picks, tournament_scores):
+def calculate_participant_score(picks, tournament_scores, rules=None):
     """
     Calculate the total pool score for one participant.
 
     Args:
-        picks: list of player names (10 players, 2 per tier)
+        picks: list of player names
         tournament_scores: dict mapping player names to their tournament data
-            Each entry should have: strokes, made_cut, finish_position
+        rules: optional tournament rules dict from DB
 
     Returns a dict with:
         - "players": list of per-player score breakdowns
         - "total": sum of all player totals
-        - "tiebreaker": the participant's winning score prediction (added separately)
     """
     players = []
 
@@ -190,7 +192,7 @@ def calculate_participant_score(picks, tournament_scores):
         if not player_data and tournament_scores:
             print(f"WARNING: No ESPN match for pick '{player_name}'")
 
-        score = calculate_player_score(player_data)
+        score = calculate_player_score(player_data, rules)
         score["name"] = player_name
         players.append(score)
 
@@ -202,16 +204,17 @@ def calculate_participant_score(picks, tournament_scores):
     }
 
 
-def calculate_leaderboard(all_participants, tournament_scores):
+def calculate_leaderboard(all_participants, tournament_scores, rules=None):
     """
     Calculate scores for all participants and return a sorted leaderboard.
 
     Args:
         all_participants: list of dicts, each with:
             - "name": participant's name
-            - "picks": list of 10 player names
+            - "picks": list of player names
             - "tiebreaker": predicted winning score (int)
         tournament_scores: dict mapping player names to tournament data
+        rules: optional tournament rules dict from DB
 
     Returns a sorted list of participant results (lowest total first).
     Ties are broken by closest tiebreaker to the actual winning score.
@@ -226,7 +229,7 @@ def calculate_leaderboard(all_participants, tournament_scores):
     results = []
     for participant in all_participants:
         score = calculate_participant_score(
-            participant["picks"], tournament_scores
+            participant["picks"], tournament_scores, rules
         )
         score["name"] = participant["name"]
         score["tiebreaker"] = participant.get("tiebreaker")

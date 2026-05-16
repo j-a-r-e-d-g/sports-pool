@@ -153,7 +153,7 @@ if tournament["status"] in ("live", "final") and entry_count > 0:
                      "rank_max": t["rank_max"], "picks_required": t["picks_required"]}
                     for t in tiers
                 ]
-                leaderboard = calculate_leaderboard(entries, scores)
+                leaderboard = calculate_leaderboard(entries, scores, tournament.get("rules"))
                 save_results(tid, leaderboard)
                 st.success(f"Archived {len(leaderboard)} results for {tournament['name']}!")
                 st.balloons()

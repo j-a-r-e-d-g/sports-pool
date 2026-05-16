@@ -213,7 +213,8 @@ else:
     data_source_scores = "Not live yet"
 
 # ---------- Calculate Standings ----------
-leaderboard = calculate_leaderboard(participants, tournament_scores)
+_rules = db_tourney.get("rules") if db_tourney else None
+leaderboard = calculate_leaderboard(participants, tournament_scores, _rules)
 
 # Check for tournament winner
 winning_score = None

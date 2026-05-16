@@ -121,44 +121,48 @@ def parse_tournament_scores(event):
 
 def _detect_missed_cuts(scores, competitor_linescores):
     """
-    Detect missed cuts from Round 3 linescores.
+    Detect missed cuts from linescores.
 
     ESPN doesn't always populate the cut status field. Once Round 3 is
-    complete, we can reliably tell: any player who completed R1 and R2
-    but has R3 = 0 missed the cut.
+    in progress or complete, we can reliably tell: any player who completed
+    R1 and R2 but has no R3 data missed the cut.
 
-    Waits until ALL made-cut players have finished R3 (every non-zero R3
-    score is a full round, >= 60 strokes) to avoid false positives from
-    players who simply haven't teed off yet.
+    Two patterns ESPN uses for MC players:
+      1. linescores = [R1, R2, {value: 0}]  (3 entries, R3 = 0)
+      2. linescores = [R1, R2]              (only 2 entries)
+
+    Waits until at least some players have R3 scores to avoid false
+    positives before the cut has actually been made.
     """
-    # Gather all non-zero R3 scores
-    r3_values = []
+    # Check if R3 has started — need at least one player with R3 > 0
+    r3_started = False
     for linescores in competitor_linescores.values():
         if len(linescores) >= 3:
             r3_val = linescores[2].get("value", 0)
             if r3_val > 0:
-                r3_values.append(r3_val)
+                r3_started = True
+                break
 
-    # R3 must be complete: need scores, and every one must be a finished
-    # round (>= 60 strokes). Mid-round values like 14 mean R3 is still
-    # in progress — don't flag cuts yet.
-    if not r3_values or not all(v >= 60 for v in r3_values):
+    if not r3_started:
         return
 
     cut_count = 0
     for name, linescores in competitor_linescores.items():
-        if len(linescores) >= 3:
-            r1 = linescores[0].get("value", 0)
-            r2 = linescores[1].get("value", 0)
-            r3 = linescores[2].get("value", 0)
-            # Completed R1 and R2 but no R3 → missed the cut
-            if r1 > 0 and r2 > 0 and r3 == 0:
-                if name in scores and scores[name]["made_cut"]:
-                    scores[name]["made_cut"] = False
-                    cut_count += 1
+        r1 = linescores[0].get("value", 0) if len(linescores) >= 1 else 0
+        r2 = linescores[1].get("value", 0) if len(linescores) >= 2 else 0
+        r3 = linescores[2].get("value", 0) if len(linescores) >= 3 else 0
+
+        # Completed R1 and R2 but no R3 → missed the cut
+        # (either only 2 linescores, or 3+ with R3 = 0)
+        has_no_r3 = (len(linescores) == 2) or (len(linescores) >= 3 and r3 == 0)
+
+        if r1 > 0 and r2 > 0 and has_no_r3:
+            if name in scores and scores[name]["made_cut"]:
+                scores[name]["made_cut"] = False
+                cut_count += 1
 
     if cut_count > 0:
-        print(f"Detected {cut_count} missed cuts from R3 linescores.")
+        print(f"Detected {cut_count} missed cuts from linescores.")
 
 
 def _assign_finish_positions(scores):
